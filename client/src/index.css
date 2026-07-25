@@ -1,0 +1,493 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ══════════════════════════════════════════════════
+   TRON GLOBAL STYLES — PathAI
+══════════════════════════════════════════════════ */
+
+:root {
+  --neon-cyan: #00ffff;
+  --neon-blue: #0088ff;
+  --neon-green: #00ff88;
+  --neon-pink: #ff0088;
+  --neon-orange: #ff8800;
+  --neon-yellow: #ffff00;
+
+  --bg-primary: #000810;
+  --bg-surface: #020f1a;
+  --bg-card: #031525;
+  --border-glow: rgba(0, 255, 255, 0.25);
+  --text-primary: #e0f8ff;
+  --text-muted: #4a9abb;
+}
+
+/* ── Base reset ─────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ─────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #020f1a; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 255, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 255, 255, 0.6); }
+
+/* ══════════════════════════════════════════════════
+   TRON GRID BACKGROUND
+══════════════════════════════════════════════════ */
+.tron-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-color: #000810;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 50px 50px;
+  animation: gridMove 25s linear infinite;
+}
+
+.tron-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 30%, rgba(0, 255, 255, 0.07) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+.tron-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 80% 80%, rgba(0, 136, 255, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+@keyframes gridMove {
+  0% { background-position: 0 0, 0 0; }
+  100% { background-position: 50px 50px, 50px 50px; }
+}
+
+/* ══════════════════════════════════════════════════
+   SCAN LINE EFFECT
+══════════════════════════════════════════════════ */
+.scan-line {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.4), transparent);
+  animation: scanLine 6s linear infinite;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+@keyframes scanLine {
+  0% { top: -2px; }
+  100% { top: 100vh; }
+}
+
+/* ══════════════════════════════════════════════════
+   NEON TEXT
+══════════════════════════════════════════════════ */
+.neon-text {
+  color: var(--neon-cyan);
+  text-shadow:
+    0 0 7px var(--neon-cyan),
+    0 0 10px var(--neon-cyan),
+    0 0 21px var(--neon-cyan),
+    0 0 42px rgba(0, 255, 255, 0.4);
+}
+
+.neon-text-sm {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 7px rgba(0, 255, 255, 0.8);
+}
+
+.neon-text-pink {
+  color: var(--neon-pink);
+  text-shadow: 0 0 7px var(--neon-pink), 0 0 21px rgba(255, 0, 136, 0.4);
+}
+
+.neon-text-green {
+  color: var(--neon-green);
+  text-shadow: 0 0 7px var(--neon-green), 0 0 21px rgba(0, 255, 136, 0.4);
+}
+
+.neon-text-orange {
+  color: var(--neon-orange);
+  text-shadow: 0 0 7px var(--neon-orange), 0 0 21px rgba(255, 136, 0, 0.4);
+}
+
+/* ══════════════════════════════════════════════════
+   TRON CARD
+══════════════════════════════════════════════════ */
+.tron-card {
+  background: linear-gradient(135deg, rgba(3,21,37,0.95) 0%, rgba(2,15,26,0.98) 100%);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 8px;
+  position: relative;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.tron-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(0,255,255,0.3), transparent, rgba(0,136,255,0.3));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.tron-card:hover::before { opacity: 1; }
+.tron-card:hover {
+  border-color: rgba(0, 255, 255, 0.35);
+  box-shadow: 0 8px 40px rgba(0, 255, 255, 0.12), 0 0 0 1px rgba(0,255,255,0.08);
+  transform: translateY(-1px);
+}
+
+/* ══════════════════════════════════════════════════
+   NEON BUTTON
+══════════════════════════════════════════════════ */
+.btn-neon {
+  background: transparent;
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.6rem 1.4rem;
+  border-radius: 4px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 8px rgba(0,255,255,0.2), inset 0 0 8px rgba(0,255,255,0.05);
+}
+
+.btn-neon::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0,255,255,0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.btn-neon:hover {
+  background: rgba(0,255,255,0.1);
+  box-shadow: 0 0 20px rgba(0,255,255,0.5), 0 0 40px rgba(0,255,255,0.2), inset 0 0 20px rgba(0,255,255,0.1);
+  text-shadow: 0 0 8px var(--neon-cyan);
+  transform: translateY(-1px);
+}
+.btn-neon:hover::before { left: 100%; }
+.btn-neon:active { transform: translateY(0); }
+.btn-neon:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-neon-solid {
+  background: linear-gradient(135deg, rgba(0,255,255,0.2), rgba(0,136,255,0.15));
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+}
+.btn-neon-solid:hover {
+  background: linear-gradient(135deg, rgba(0,255,255,0.35), rgba(0,136,255,0.25));
+}
+
+.btn-neon-pink {
+  border-color: var(--neon-pink);
+  color: var(--neon-pink);
+  box-shadow: 0 0 8px rgba(255,0,136,0.2), inset 0 0 8px rgba(255,0,136,0.05);
+}
+.btn-neon-pink:hover {
+  background: rgba(255,0,136,0.1);
+  box-shadow: 0 0 20px rgba(255,0,136,0.5);
+  text-shadow: 0 0 8px var(--neon-pink);
+}
+
+.btn-neon-green {
+  border-color: var(--neon-green);
+  color: var(--neon-green);
+}
+.btn-neon-green:hover {
+  background: rgba(0,255,136,0.1);
+  box-shadow: 0 0 20px rgba(0,255,136,0.4);
+}
+
+/* ══════════════════════════════════════════════════
+   INPUTS
+══════════════════════════════════════════════════ */
+.tron-input {
+  background: rgba(2, 15, 26, 0.8);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 0.6rem 1rem;
+  font-size: 0.875rem;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.25s ease;
+  outline: none;
+  width: 100%;
+}
+.tron-input::placeholder { color: rgba(74, 154, 187, 0.7); }
+.tron-input:focus {
+  border-color: rgba(0, 255, 255, 0.6);
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.2), inset 0 0 8px rgba(0, 255, 255, 0.05);
+  background: rgba(3, 21, 37, 0.9);
+}
+
+.tron-select {
+  background: rgba(2, 15, 26, 0.9);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 0.6rem 1rem;
+  font-size: 0.875rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.25s;
+  width: 100%;
+}
+.tron-select:focus { border-color: rgba(0, 255, 255, 0.6); }
+.tron-select option { background: #020f1a; color: #e0f8ff; }
+
+/* ══════════════════════════════════════════════════
+   PROGRESS / BARS
+══════════════════════════════════════════════════ */
+.neon-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #00ffff, #0088ff);
+  box-shadow: 0 0 8px rgba(0,255,255,0.6);
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.neon-bar-track {
+  height: 4px;
+  background: rgba(0,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* ══════════════════════════════════════════════════
+   BADGE / TAGS
+══════════════════════════════════════════════════ */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+.tag-cyan  { background: rgba(0,255,255,0.12); color: #00ffff; border: 1px solid rgba(0,255,255,0.3); }
+.tag-blue  { background: rgba(0,136,255,0.12); color: #66bbff; border: 1px solid rgba(0,136,255,0.3); }
+.tag-green { background: rgba(0,255,136,0.12); color: #00ff88; border: 1px solid rgba(0,255,136,0.3); }
+.tag-pink  { background: rgba(255,0,136,0.12); color: #ff66bb; border: 1px solid rgba(255,0,136,0.3); }
+.tag-orange{ background: rgba(255,136,0,0.12); color: #ff9933; border: 1px solid rgba(255,136,0,0.3); }
+.tag-yellow{ background: rgba(255,255,0,0.1);  color: #ffff66; border: 1px solid rgba(255,255,0,0.25); }
+.tag-gray  { background: rgba(100,150,180,0.1);color: #8ab8cc; border: 1px solid rgba(100,150,180,0.25);}
+
+/* ══════════════════════════════════════════════════
+   SIDEBAR
+══════════════════════════════════════════════════ */
+.sidebar {
+  background: rgba(2, 10, 20, 0.97);
+  border-right: 1px solid rgba(0, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+}
+
+/* ══════════════════════════════════════════════════
+   TOOLTIP
+══════════════════════════════════════════════════ */
+.tron-tooltip {
+  background: rgba(3, 21, 37, 0.98);
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: #e0f8ff;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ══════════════════════════════════════════════════
+   ALGORITHM NODE STATES (for visualization)
+══════════════════════════════════════════════════ */
+.node-default   { fill: #031525; stroke: rgba(0,255,255,0.4); }
+.node-frontier  { fill: rgba(0,136,255,0.2); stroke: #0088ff; }
+.node-visited   { fill: rgba(0,255,255,0.15); stroke: #00ffff; }
+.node-scheduled { fill: rgba(0,255,136,0.2); stroke: #00ff88; }
+.node-deferred  { fill: rgba(255,136,0,0.15); stroke: #ff8800; }
+.node-current   { fill: rgba(0,255,255,0.3); stroke: #00ffff; stroke-width: 2.5; }
+
+/* ══════════════════════════════════════════════════
+   DIFFICULTY COLORS
+══════════════════════════════════════════════════ */
+.diff-1 { color: #00ff88; }
+.diff-2 { color: #88ff00; }
+.diff-3 { color: #ffff00; }
+.diff-4 { color: #ff8800; }
+.diff-5 { color: #ff0044; }
+
+/* ══════════════════════════════════════════════════
+   HEXAGON DECORATIONS
+══════════════════════════════════════════════════ */
+.hex-decoration {
+  width: 60px; height: 60px;
+  background: transparent;
+  border: 1px solid rgba(0,255,255,0.15);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  animation: float 6s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════
+   DATA LOADING ANIMATION
+══════════════════════════════════════════════════ */
+.loading-bar {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #00ffff, transparent);
+  animation: loadingBar 1.5s ease-in-out infinite;
+}
+
+@keyframes loadingBar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ══════════════════════════════════════════════════
+   GLOW DIVIDER
+══════════════════════════════════════════════════ */
+.glow-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,255,255,0.4), transparent);
+  margin: 1.5rem 0;
+}
+
+/* ══════════════════════════════════════════════════
+   SEMESTER CARD COLORS
+══════════════════════════════════════════════════ */
+.semester-1 { border-left: 3px solid #00ffff; }
+.semester-2 { border-left: 3px solid #0088ff; }
+.semester-3 { border-left: 3px solid #00ff88; }
+.semester-4 { border-left: 3px solid #ffff00; }
+.semester-5 { border-left: 3px solid #ff8800; }
+.semester-6 { border-left: 3px solid #ff0088; }
+.semester-7 { border-left: 3px solid #aa00ff; }
+.semester-8 { border-left: 3px solid #00ffaa; }
+
+/* ══════════════════════════════════════════════════
+   D3 GRAPH STYLES
+══════════════════════════════════════════════════ */
+.graph-link {
+  stroke: rgba(0, 255, 255, 0.25);
+  stroke-width: 1.5;
+  fill: none;
+  marker-end: url(#arrowhead);
+}
+
+.graph-link:hover { stroke: rgba(0, 255, 255, 0.7); stroke-width: 2; }
+
+.graph-node circle {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.graph-node text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  fill: #e0f8ff;
+  text-anchor: middle;
+  pointer-events: none;
+  dominant-baseline: middle;
+}
+
+/* ══════════════════════════════════════════════════
+   COMPARISON TABLE
+══════════════════════════════════════════════════ */
+.compare-table th {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--neon-cyan);
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(0,255,255,0.15);
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.compare-table td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid rgba(0,255,255,0.06);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+}
+
+.compare-table tr:hover td { background: rgba(0,255,255,0.04); }
+
+/* ══════════════════════════════════════════════════
+   FLOAT ANIMATION
+══════════════════════════════════════════════════ */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+/* ══════════════════════════════════════════════════
+   ALGO STEP HIGHLIGHT
+══════════════════════════════════════════════════ */
+.step-item {
+  border-left: 2px solid rgba(0,255,255,0.2);
+  padding: 0.4rem 0.75rem;
+  margin-bottom: 0.25rem;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  color: #8ab8cc;
+  transition: all 0.2s;
+}
+
+.step-item.active {
+  border-left-color: #00ffff;
+  background: rgba(0,255,255,0.06);
+  color: #00ffff;
+  text-shadow: 0 0 6px rgba(0,255,255,0.5);
+}
+
+.step-item.schedule { border-left-color: #00ff88; color: #00ff88; }
+.step-item.defer    { border-left-color: #ff8800; color: #ff8800; }
+.step-item.backtrack{ border-left-color: #ff0088; color: #ff0088; }
+.step-item.goal     { border-left-color: #ffff00; color: #ffff00; }

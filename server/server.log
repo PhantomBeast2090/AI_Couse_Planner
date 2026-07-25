@@ -1,0 +1,7 @@
+✅ Auto-loaded 82 courses from sample dataset
+
+🚀 PathAI server running at http://localhost:5000
+   API docs: http://localhost:5000/api/health
+   Courses:  http://localhost:5000/api/courses
+   Graph:    http://localhost:5000/api/planning/graph
+
