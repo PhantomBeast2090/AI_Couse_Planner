@@ -46,6 +46,12 @@ const initialState = {
   selectedAlgorithm: 'bfs',
   specializationTags: [],
 
+  // Planning scope — single source of truth for what gets planned/graphed.
+  // Exactly one of the two may be set; every planning call sends it and the
+  // backend resolves the authoritative scope (never the full catalog).
+  selectedProgramId: null,
+  targetCourseId: null,
+
   // UI
   activeTab: 'dashboard',
   notification: null,
@@ -143,6 +149,43 @@ function reducer(state, action) {
     case 'SET_SPECIALIZATION_TAGS':
       return { ...state, specializationTags: action.payload };
 
+    // Selection changes invalidate every stale derived result: plans,
+    // comparisons, agent output, simulations and graph data belong to the
+    // previous scope and must never be shown for the new one.
+    case 'SET_PROGRAM':
+      return {
+        ...state,
+        selectedProgramId: action.payload,
+        targetCourseId: null,
+        currentPlan: null, planError: null,
+        comparisonResult: null,
+        agentResult: null,
+        simulationResult: null,
+        graphLoaded: false,
+      };
+    case 'SET_TARGET_COURSE':
+      return {
+        ...state,
+        targetCourseId: action.payload,
+        selectedProgramId: null,
+        currentPlan: null, planError: null,
+        comparisonResult: null,
+        agentResult: null,
+        simulationResult: null,
+        graphLoaded: false,
+      };
+    case 'CLEAR_SELECTION':
+      return {
+        ...state,
+        selectedProgramId: null,
+        targetCourseId: null,
+        currentPlan: null, planError: null,
+        comparisonResult: null,
+        agentResult: null,
+        simulationResult: null,
+        graphLoaded: false,
+      };
+
     case 'SET_TAB':
       return { ...state, activeTab: action.payload };
     case 'SET_NOTIFICATION':
@@ -153,6 +196,25 @@ function reducer(state, action) {
     default:
       return state;
   }
+}
+
+// ── Selection helpers (pure; the single source of planning truth) ──
+// Returns { programId } | { targetCourseId } | null. Null means NO selection
+// — callers must block the action, never substitute the full catalog.
+export function buildSelection(state) {
+  if (state?.selectedProgramId) return { programId: state.selectedProgramId };
+  if (state?.targetCourseId) return { targetCourseId: state.targetCourseId };
+  return null;
+}
+
+export function hasSelection(state) {
+  return buildSelection(state) !== null;
+}
+
+export function selectionLabel(state) {
+  if (state?.selectedProgramId) return `Program: ${state.selectedProgramId}`;
+  if (state?.targetCourseId) return `Course: ${state.targetCourseId}`;
+  return 'No selection';
 }
 
 // ── Context ────────────────────────────────────────────────
@@ -193,19 +255,19 @@ export function AppProvider({ children }) {
     }
   }, [notify]);
 
-  const refreshGraph = useCallback(async () => {
+  const refreshGraph = useCallback(async (selection) => {
     try {
-      const res = await getGraphData();
+      const res = await getGraphData(selection);
       dispatch({ type: 'SET_GRAPH_DATA', payload: res.data });
     } catch {
       // silently fail for graph
     }
   }, []);
 
-  const runPlan = useCallback(async (algorithm, goal, constraints, completedIds) => {
+  const runPlan = useCallback(async (algorithm, goal, constraints, completedIds, selection) => {
     dispatch({ type: 'SET_PLAN_LOADING', payload: true });
     try {
-      const res = await runAlgorithm(algorithm, goal, constraints, completedIds);
+      const res = await runAlgorithm(algorithm, goal, constraints, completedIds, selection);
       dispatch({ type: 'SET_PLAN', payload: res.data });
       notify(`✅ ${algorithm.toUpperCase()} plan computed — ${res.data.totalSemesters} semesters`, 'success');
       return res.data;
@@ -216,10 +278,10 @@ export function AppProvider({ children }) {
     }
   }, [notify]);
 
-  const runAgentPlan = useCallback(async (goal, constraints, completedIds, tags) => {
+  const runAgentPlan = useCallback(async (goal, constraints, completedIds, tags, selection) => {
     dispatch({ type: 'SET_AGENT_LOADING', payload: true });
     try {
-      const res = await runAgent(goal, constraints, completedIds, tags);
+      const res = await runAgent(goal, constraints, completedIds, tags, selection);
       dispatch({ type: 'SET_AGENT_RESULT', payload: res.data });
       notify(`🤖 Agent selected "${res.data.chosenStrategy}" — ${res.data.totalSemesters} semesters`, 'success');
       return res.data;

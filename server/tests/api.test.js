@@ -27,7 +27,7 @@ function request(method, path, body) {
         method,
         hostname: url.hostname,
         port: url.port,
-        path: url.pathname,
+        path: url.pathname + url.search,
         headers: { 'Content-Type': 'application/json' },
       },
       (res) => {
@@ -67,17 +67,36 @@ after(async () => {
 });
 
 describe('planning API', () => {
+  // Chain fixture A -> B -> C with target C resolves scope {A, B, C}.
+  const SELECTION = { targetCourseId: 'C' };
+
   test('POST /api/planning/run returns a valid BFS plan', async () => {
     const { status, json } = await request('POST', '/api/planning/run', {
       algorithm: 'bfs',
       goal: 'fastest',
       constraints: { ...DEFAULT_CONSTRAINTS },
       completedCourseIds: [],
+      selection: SELECTION,
     });
     assert.strictEqual(status, 200);
     assert.strictEqual(json.success, true);
     assert.strictEqual(json.semesterPlan.length, 3);
     assert.strictEqual(typeof json.executionTimeMs, 'number');
+    assert.deepStrictEqual(json.scope, {
+      kind: 'course', programId: null, targetCourseId: 'C', selectedName: 'C',
+      size: 3, completed: 0, remaining: 3, edgeCount: 2, criticalDepth: 3,
+    });
+    assert.strictEqual(json.validation.valid, true);
+  });
+
+  test('POST /api/planning/run requires a selection (no global fallback)', async () => {
+    const { status, json } = await request('POST', '/api/planning/run', {
+      algorithm: 'bfs',
+      constraints: {},
+      completedCourseIds: [],
+    });
+    assert.strictEqual(status, 400);
+    assert.strictEqual(json.errorCode, 'SELECTION_REQUIRED');
   });
 
   test('POST /api/planning/run rejects unknown algorithms', async () => {
@@ -85,6 +104,7 @@ describe('planning API', () => {
       algorithm: 'nope',
       constraints: {},
       completedCourseIds: [],
+      selection: SELECTION,
     });
     assert.strictEqual(status, 400);
     assert.ok(json.error);
@@ -97,11 +117,15 @@ describe('planning API', () => {
       goal: 'fastest',
       constraints: { ...DEFAULT_CONSTRAINTS },
       completedCourseIds: [],
+      selection: SELECTION,
     });
     assert.strictEqual(status, 200);
     assert.ok(json.algorithmA && json.algorithmB, 'both results present');
     assert.ok(json.comparison && json.comparison.winner, 'winner summary present');
     assert.ok(json.comparison.winner.fewestSemesters, 'fewest-semesters winner present');
+    // Both candidates solved the SAME scope.
+    assert.deepStrictEqual(json.algorithmA.scope, json.algorithmB.scope);
+    assert.strictEqual(json.algorithmA.scope.size, 3);
   });
 
   test('POST /api/planning/agent chooses a strategy with a log', async () => {
@@ -110,12 +134,14 @@ describe('planning API', () => {
       constraints: { ...DEFAULT_CONSTRAINTS },
       completedCourseIds: [],
       specializationTags: [],
+      selection: SELECTION,
     });
     assert.strictEqual(status, 200);
     assert.strictEqual(json.success, true);
     assert.ok(json.chosenStrategy, 'agent must choose a strategy');
     assert.ok(Array.isArray(json.agentLog) && json.agentLog.length > 0, 'agentLog present');
     assert.ok(Array.isArray(json.workloadAnalysis), 'workload analysis present');
+    assert.strictEqual(json.scope.targetCourseId, 'C');
   });
 
   test('GET /api/planning/graph returns nodes, edges, stats', async () => {
@@ -125,6 +151,16 @@ describe('planning API', () => {
     assert.strictEqual(json.edges.length, 2);
     assert.strictEqual(json.stats.totalCourses, 3);
     assert.strictEqual(json.stats.totalEdges, 2);
+    assert.strictEqual(json.scope, null);
+  });
+
+  test('GET /api/planning/graph scopes nodes and edges to the selection', async () => {
+    const { status, json } = await request('GET', '/api/planning/graph?targetCourseId=B');
+    assert.strictEqual(status, 200);
+    assert.deepStrictEqual(json.nodes.map((n) => n.id).sort(), ['A', 'B']);
+    assert.deepStrictEqual(json.edges, [{ source: 'A', target: 'B', id: 'A->B' }]);
+    assert.strictEqual(json.scope.size, 2);
+    assert.strictEqual(json.scope.targetCourseId, 'B');
   });
 
   test('GET /api/health reports status', async () => {

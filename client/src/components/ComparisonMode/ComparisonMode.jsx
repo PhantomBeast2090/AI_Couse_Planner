@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useApp } from '../../store/AppContext';
+import { useApp, buildSelection, hasSelection } from '../../store/AppContext';
 import { compareAlgorithms } from '../../utils/api';
+import ScopePicker, { ScopeLine } from '../shared/ScopePicker';
 
 const PAIR_OPTIONS = [
   { a: 'bfs',   b: 'astar', label: 'BFS  vs  A*',   colorA: '#00ffff', colorB: '#ffff00' },
@@ -19,7 +20,7 @@ const METRICS = [
 ];
 
 export default function ComparisonMode() {
-  const { courses, completedCourseIds, constraints, notify } = useApp();
+  const { courses, completedCourseIds, constraints, notify, selectedProgramId, targetCourseId } = useApp();
   const [pairIdx, setPairIdx] = useState(0);
   const [goal, setGoal] = useState('balanced');
   const [result, setResult] = useState(null);
@@ -27,12 +28,15 @@ export default function ComparisonMode() {
   const [activeTab, setActiveTab] = useState('metrics');
 
   const pair = PAIR_OPTIONS[pairIdx];
+  const selection = buildSelection({ selectedProgramId, targetCourseId });
+  const selectionReady = hasSelection({ selectedProgramId, targetCourseId });
 
   const handleCompare = async () => {
     if (!courses.length) return notify('Load a dataset first', 'error');
+    if (!selectionReady) return notify('Select a program or target course first', 'error');
     setLoading(true);
     try {
-      const res = await compareAlgorithms(pair.a, pair.b, goal, constraints, completedCourseIds);
+      const res = await compareAlgorithms(pair.a, pair.b, goal, constraints, completedCourseIds, selection);
       setResult(res.data);
       notify(`✅ Comparison complete: ${pair.label}`, 'success');
     } catch (err) {
@@ -54,6 +58,7 @@ export default function ComparisonMode() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
+      <ScopePicker />
       {/* Controls */}
       <div className="tron-card p-5 space-y-4">
         <div className="text-[10px] text-cyan-600 font-mono uppercase tracking-widest">⇌ Algorithm Pair</div>
@@ -76,7 +81,7 @@ export default function ComparisonMode() {
               ))}
             </select>
           </div>
-          <button onClick={handleCompare} disabled={loading}
+          <button onClick={handleCompare} disabled={loading || !selectionReady}
             className="btn-neon btn-neon-solid text-xs py-2 px-6 ml-auto">
             {loading ? '⟳ COMPARING...' : '⇌ RUN COMPARISON'}
           </button>
@@ -85,6 +90,7 @@ export default function ComparisonMode() {
 
       {result && (
         <>
+          <ScopeLine scope={result.algorithmA?.scope} />
           {/* VS Header */}
           <div className="tron-card p-4 flex items-center justify-center gap-8">
             <div className="text-center">

@@ -1,19 +1,24 @@
 import { useState } from 'react';
-import { useApp } from '../../store/AppContext';
+import { useApp, buildSelection, hasSelection } from '../../store/AppContext';
+import ScopePicker, { ScopeLine } from '../shared/ScopePicker';
 
 const GOALS = ['fastest', 'easiest', 'balanced', 'specialization'];
 const ALL_TAGS = ['AI', 'ML', 'DL', 'NLP', 'CV', 'RL', 'CS', 'Math', 'Systems', 'Data', 'DS'];
 const SEM_COLORS = ['#00ffff','#0088ff','#00ff88','#ffff00','#ff8800','#ff0088','#aa44ff','#00ffaa'];
 
 export default function AgentPlanner() {
-  const { courses, completedCourseIds, constraints, notify, agentResult, agentLoading, runAgentPlan } = useApp();
+  const { courses, completedCourseIds, constraints, notify, agentResult, agentLoading, runAgentPlan, selectedProgramId, targetCourseId } = useApp();
   const [goal, setGoal] = useState('balanced');
   const [tags, setTags] = useState([]);
   const [activeTab, setActiveTab] = useState('plan');
 
+  const selection = buildSelection({ selectedProgramId, targetCourseId });
+  const selectionReady = hasSelection({ selectedProgramId, targetCourseId });
+
   const handleRun = async () => {
     if (!courses.length) return notify('Load a dataset first', 'error');
-    await runAgentPlan(goal, constraints, completedCourseIds, tags);
+    if (!selectionReady) return notify('Select a program or target course first', 'error');
+    await runAgentPlan(goal, constraints, completedCourseIds, tags, selection);
     setActiveTab('plan');
   };
 
@@ -23,6 +28,7 @@ export default function AgentPlanner() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
+      <ScopePicker />
       {/* Agent config */}
       <div className="tron-card p-5 space-y-4">
         <div className="flex items-center gap-3">
@@ -67,7 +73,7 @@ export default function AgentPlanner() {
           </div>
         </div>
 
-        <button onClick={handleRun} disabled={agentLoading}
+        <button onClick={handleRun} disabled={agentLoading || !selectionReady}
           className="btn-neon btn-neon-green w-full py-3 text-sm font-mono">
           {agentLoading ? (
             <span className="flex items-center justify-center gap-2">
@@ -79,6 +85,7 @@ export default function AgentPlanner() {
 
       {result && (
         <>
+          <ScopeLine scope={result.scope} />
           {/* Strategy evaluation */}
           <div className="tron-card p-4">
             <div className="text-[10px] text-cyan-600 font-mono uppercase tracking-widest mb-3">

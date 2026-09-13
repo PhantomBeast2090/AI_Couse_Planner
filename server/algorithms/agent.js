@@ -254,19 +254,29 @@ function intelligentAgent(courses, constraints = {}, completedCourses = new Set(
     });
   });
 
-  // DECISION: Pick the best-scoring plan
-  results.sort((a, b) => b.score - a.score);
+  // DECISION: successful candidates outrank failed ones; argmax on score
+  // within each group. A partial failure must never win on score alone and
+  // be returned as a success.
+  results.sort((a, b) => {
+    const sa = a.result && a.result.success ? 1 : 0;
+    const sb = b.result && b.result.success ? 1 : 0;
+    if (sa !== sb) return sb - sa;
+    return b.score - a.score;
+  });
   const best = results[0];
 
   // If every candidate failed (empty plan), fail safely instead of
   // returning an empty plan as if it were a valid schedule.
   const bestPlan = best.result.semesterPlan || [];
-  if (bestPlan.length === 0) {
+  const bestFailed = !best.result.success;
+  if (bestPlan.length === 0 || bestFailed) {
     agentLog.push({
       phase: 'DECISION',
-      chosenStrategy: null,
+      chosenStrategy: bestFailed ? best.strat : null,
       score: best.score,
-      message: `Agent DECISION: all strategies failed (${results.map(r => r.strat).join(', ')}) - no valid plan`
+      message: bestFailed
+        ? `Agent DECISION: best candidate "${best.strat}" failed - no valid plan`
+        : `Agent DECISION: all strategies failed (${results.map(r => r.strat).join(', ')}) - no valid plan`
     });
     return {
       algorithm: 'Intelligent Agent',

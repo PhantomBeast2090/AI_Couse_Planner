@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useApp } from '../../store/AppContext';
+import { useApp, buildSelection, hasSelection } from '../../store/AppContext';
 import { getPrograms, runDegreePlan } from '../../utils/api';
+import ScopePicker, { ScopeLine } from '../shared/ScopePicker';
 
 const SEM_COLORS = ['#00ffff','#0088ff','#00ff88','#ffff00','#ff8800','#ff0088','#aa44ff','#00ffaa','#ff4444','#44ffff'];
 const DIFF_COLORS = { 1:'#00ff88', 2:'#88ff00', 3:'#ffff00', 4:'#ff8800', 5:'#ff0044' };
@@ -10,7 +11,7 @@ const DIFF_COLORS = { 1:'#00ff88', 2:'#88ff00', 3:'#ffff00', 4:'#ff8800', 5:'#ff
 const DEGREE_DEFAULTS = { maxCredits: 21, maxHardCourses: 3, maxCoursesPerSemester: 8 };
 
 export default function SemesterTimeline() {
-  const { courses, completedCourseIds, constraints, currentPlan, runPlan, notify } = useApp();
+  const { courses, completedCourseIds, constraints, currentPlan, runPlan, notify, selectedProgramId, targetCourseId } = useApp();
   const [plan, setPlan] = useState(currentPlan);
   const [loading, setLoading] = useState(false);
   const [selectedAlg, setSelectedAlg] = useState('bfs');
@@ -60,11 +61,16 @@ export default function SemesterTimeline() {
     }));
   };
 
+  const selection = buildSelection({ selectedProgramId, targetCourseId });
+  const selectionReady = hasSelection({ selectedProgramId, targetCourseId });
+
   const handleGenerate = async () => {
     if (!courses.length) return notify('Load a dataset first', 'error');
+    if (!selectionReady) return notify('Select a program or target course first', 'error');
     setLoading(true);
     try {
-      const res = await runPlan(selectedAlg, selectedGoal, constraints, completedCourseIds);
+      // Scoped pipeline: the timeline consumes the scoped plan, never the catalog.
+      const res = await runPlan(selectedAlg, selectedGoal, constraints, completedCourseIds, selection);
       if (res) setPlan(res);
     } finally {
       setLoading(false);
@@ -76,6 +82,7 @@ export default function SemesterTimeline() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
+      <ScopePicker />
       {/* Controls */}
       <div className="tron-card p-4 flex flex-wrap gap-4 items-center">
         <div className="flex gap-3 items-center">
@@ -94,11 +101,12 @@ export default function SemesterTimeline() {
             ))}
           </select>
         </div>
-        <button onClick={handleGenerate} disabled={loading}
+        <button onClick={handleGenerate} disabled={loading || !selectionReady}
           className="btn-neon btn-neon-solid text-xs py-2 px-5 ml-auto">
           {loading ? '⟳ GENERATING...' : '▤ GENERATE TIMELINE'}
         </button>
       </div>
+      {plan && <ScopeLine scope={plan.scope} />}
 
       {/* Degree timeline: program-scoped, max 8 semesters */}
       <div className="tron-card p-4 space-y-4">

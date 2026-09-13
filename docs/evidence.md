@@ -16,7 +16,7 @@ Implementations: `server/algorithms/{bfs,dfs,ucs,astar,csp}.js`, documented per-
 
 ## Test Methodology
 
-`docs/testing.md` + `server/tests/`. Run `cd server && npm test` (currently 125 tests: planner correctness, agent decisions, planning routes, simulation routes, degree timelines). Tests assert prerequisite validity, constraint respect and safe failure through the shared `server/utils/planValidator.js`, not step-text snapshots.
+`docs/testing.md` + `server/tests/`. Run `cd server && npm test` (currently 144 tests: planner correctness, scope resolution, agent decisions, scoped planning/simulation/degree routes). Tests assert prerequisite validity, constraint respect and safe failure through the shared `server/utils/planValidator.js`, not step-text snapshots. The scope invariant is asserted structurally: every successful planning response carries `scope`, and tests verify planned ⊆ scope, graph ⊆ scope, and comparison-side scope equality.
 
 ## Continuous Integration
 

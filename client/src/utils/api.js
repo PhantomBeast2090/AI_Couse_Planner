@@ -22,29 +22,35 @@ export const updateCourse     = (id, data)  => api.put(`/courses/${id}`, data);
 export const deleteCourse     = (id)        => api.delete(`/courses/${id}`);
 export const clearCourses     = ()          => api.post('/courses/clear');
 
-// ── Planning ───────────────────────────────────────────────
-export const runAlgorithm = (algorithm, goal, constraints, completedIds) =>
-  api.post('/planning/run', { algorithm, goal, constraints, completedCourseIds: completedIds });
+// ── Planning (every call carries an explicit selection; the backend
+// resolves the authoritative scope and never falls back to the catalog) ──
+export const runAlgorithm = (algorithm, goal, constraints, completedIds, selection) =>
+  api.post('/planning/run', { algorithm, goal, constraints, completedCourseIds: completedIds, selection });
 
-export const compareAlgorithms = (algorithmA, algorithmB, goal, constraints, completedIds) =>
-  api.post('/planning/compare', { algorithmA, algorithmB, goal, constraints, completedCourseIds: completedIds });
+export const compareAlgorithms = (algorithmA, algorithmB, goal, constraints, completedIds, selection) =>
+  api.post('/planning/compare', { algorithmA, algorithmB, goal, constraints, completedCourseIds: completedIds, selection });
 
-export const runAgent = (goal, constraints, completedIds, specializationTags) =>
-  api.post('/planning/agent', { goal, constraints, completedCourseIds: completedIds, specializationTags });
+export const runAgent = (goal, constraints, completedIds, specializationTags, selection) =>
+  api.post('/planning/agent', { goal, constraints, completedCourseIds: completedIds, specializationTags, selection });
 
-export const getGraphData = () => api.get('/planning/graph');
+export const getGraphData = (selection) => {
+  const params = {};
+  if (selection?.programId) params.programId = selection.programId;
+  if (selection?.targetCourseId) params.targetCourseId = selection.targetCourseId;
+  return api.get('/planning/graph', { params });
+};
 
 export const getPrograms = () => api.get('/programs');
 
 export const runDegreePlan = (programId, goal, constraints, completedIds, specializationTags) =>
   api.post('/planning/degree', { programId, goal, constraints, completedCourseIds: completedIds, specializationTags });
 
-// ── Simulation ─────────────────────────────────────────────
-export const simulateFailCourse = (failedCourseId, completedIds, goal, constraints) =>
-  api.post('/simulation/fail-course', { failedCourseId, completedCourseIds: completedIds, goal, constraints });
+// ── Simulation (scoped: selection required, membership enforced server-side) ──
+export const simulateFailCourse = (failedCourseId, completedIds, goal, constraints, selection) =>
+  api.post('/simulation/fail-course', { failedCourseId, completedCourseIds: completedIds, goal, constraints, selection });
 
-export const simulateComplete = (completedIds, goal, constraints) =>
-  api.post('/simulation/complete', { completedCourseIds: completedIds, goal, constraints });
+export const simulateComplete = (completedIds, goal, constraints, selection) =>
+  api.post('/simulation/complete', { completedCourseIds: completedIds, goal, constraints, selection });
 
 export const simulateWhatIf = (payload) =>
   api.post('/simulation/what-if', payload);

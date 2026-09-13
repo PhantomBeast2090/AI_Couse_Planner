@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useApp } from '../../store/AppContext';
+import { useApp, buildSelection, hasSelection } from '../../store/AppContext';
 import { simulateFailCourse, simulateComplete } from '../../utils/api';
+import ScopePicker, { ScopeLine } from '../shared/ScopePicker';
 
 const SEM_COLORS = ['#00ffff','#0088ff','#00ff88','#ffff00','#ff8800','#ff0088','#aa44ff','#00ffaa'];
 
 export default function WhatIfSimulator() {
-  const { courses, completedCourseIds, constraints, notify } = useApp();
+  const { courses, completedCourseIds, constraints, notify, selectedProgramId, targetCourseId } = useApp();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [activeTab, setActiveTab] = useState('fail');
@@ -20,11 +21,15 @@ export default function WhatIfSimulator() {
   const availableToComplete = courses.filter(c => !completedCourseIds.includes(c.id));
   const courseMap = Object.fromEntries(courses.map(c => [c.id, c]));
 
+  const selection = buildSelection({ selectedProgramId, targetCourseId });
+  const selectionReady = hasSelection({ selectedProgramId, targetCourseId });
+
   const handleFailSimulation = async () => {
     if (!failCourseId) return notify('Select a course to fail', 'error');
+    if (!selectionReady) return notify('Select a program or target course first', 'error');
     setLoading(true);
     try {
-      const res = await simulateFailCourse(failCourseId, completedCourseIds, 'balanced', constraints);
+      const res = await simulateFailCourse(failCourseId, completedCourseIds, 'balanced', constraints, selection);
       setResult(res.data);
       notify(`Simulated failing: ${res.data.failedCourse?.name}`, 'info');
     } catch (err) {
@@ -35,10 +40,11 @@ export default function WhatIfSimulator() {
 
   const handleCompleteSimulation = async () => {
     if (simCompletedIds.length === 0) return notify('Select courses to complete', 'error');
+    if (!selectionReady) return notify('Select a program or target course first', 'error');
     setLoading(true);
     try {
       const mergedCompleted = [...new Set([...completedCourseIds, ...simCompletedIds])];
-      const res = await simulateComplete(mergedCompleted, 'balanced', constraints);
+      const res = await simulateComplete(mergedCompleted, 'balanced', constraints, selection);
       setResult(res.data);
       notify(`Simulated completing ${simCompletedIds.length} extra courses`, 'success');
     } catch (err) {
@@ -55,6 +61,7 @@ export default function WhatIfSimulator() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
+      <ScopePicker />
       {/* Simulation Controls */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -75,7 +82,7 @@ export default function WhatIfSimulator() {
               <option value="">-- Select a course you might fail --</option>
               {availableToFail.map(c => <option key={c.id} value={c.id}>{c.name} ({c.id})</option>)}
             </select>
-            <button onClick={(e) => { e.stopPropagation(); handleFailSimulation(); }} disabled={loading || !failCourseId}
+            <button onClick={(e) => { e.stopPropagation(); handleFailSimulation(); }} disabled={loading || !failCourseId || !selectionReady}
               className="btn-neon w-full py-2" style={{ color: '#ff8800', borderColor: '#ff8800' }}>
               {loading && activeTab === 'fail' ? 'SIMULATING...' : 'RUN FAIL SIMULATION'}
             </button>
@@ -122,7 +129,7 @@ export default function WhatIfSimulator() {
                 </div>
               ))}
             </div>
-            <button onClick={(e) => { e.stopPropagation(); handleCompleteSimulation(); }} disabled={loading || simCompletedIds.length === 0}
+            <button onClick={(e) => { e.stopPropagation(); handleCompleteSimulation(); }} disabled={loading || simCompletedIds.length === 0 || !selectionReady}
               className="btn-neon w-full py-2" style={{ color: '#00ff88', borderColor: '#00ff88' }}>
               {loading && activeTab === 'complete' ? 'SIMULATING...' : 'RUN FAST-TRACK SIMULATION'}
             </button>
@@ -187,7 +194,7 @@ export default function WhatIfSimulator() {
 
           {/* Revised Timeline */}
           <div className="tron-card p-5">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-1">
               <div className="text-[10px] text-cyan-600 font-mono uppercase tracking-widest">
                 Revised Optimal Timeline
               </div>
@@ -195,6 +202,7 @@ export default function WhatIfSimulator() {
                 {result.revisedPlan?.totalSemesters || 0} semesters
               </div>
             </div>
+            <div className="mb-4"><ScopeLine scope={result.revisedPlan?.scope || result.scope} /></div>
 
             {plan.length > 0 ? (
               <div className="space-y-3">

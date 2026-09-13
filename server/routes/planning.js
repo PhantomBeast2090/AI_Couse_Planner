@@ -18,10 +18,49 @@ const { cspPlanner } = require('../algorithms/csp');
 const { intelligentAgent } = require('../algorithms/agent');
 const { planDegreeTimeline } = require('../algorithms/degreePlanner');
 const { listPrograms } = require('../data/programs');
+const { DEGREE_LIMITS } = require('../data/programs');
+const { resolvePlanningScope, scopeMeta, finalizeScopedResult } = require('../utils/scopeResolver');
 const coursesRouter = require('./courses');
 
 function getCourses() {
   return coursesRouter.getCourseStore();
+}
+
+/** Clamp user caps to the hard product ceilings (never raised). */
+function effectiveConstraints(constraints = {}) {
+  const {
+    maxCredits = 18,
+    maxHardCourses = 2,
+    maxCoursesPerSemester = 5,
+  } = constraints || {};
+  return {
+    maxCredits,
+    maxHardCourses,
+    maxCoursesPerSemester: Math.min(maxCoursesPerSemester, DEGREE_LIMITS.maxCoursesPerSemester),
+  };
+}
+
+/**
+ * Resolve the authoritative planning scope from the request. Accepts either
+ * { selection: { programId | targetCourseId } } or top-level programId /
+ * targetCourseId. Sends 400 and returns null when selection is missing or
+ * unresolvable — never falls back to the full dataset.
+ */
+function resolveScopeOr400(req, res) {
+  const body = req.body || {};
+  const selection = body.selection || { programId: body.programId, targetCourseId: body.targetCourseId };
+  const completed = new Set(body.completedCourseIds || []);
+  const catalog = getCourses();
+  if (catalog.length === 0) {
+    res.status(400).json({ error: 'No courses loaded. Please load a dataset first.' });
+    return null;
+  }
+  const scope = resolvePlanningScope(selection, catalog, completed);
+  if (!scope.ok) {
+    res.status(400).json({ error: scope.error.message, errorCode: scope.error.code });
+    return null;
+  }
+  return { scope, completed, effective: effectiveConstraints(body.constraints) };
 }
 
 // ── POST /api/planning/run ─────────────────────────────────
@@ -29,35 +68,32 @@ router.post('/run', (req, res) => {
   const {
     algorithm = 'bfs',
     goal = 'fastest',
-    constraints = {},
-    completedCourseIds = []
   } = req.body;
 
-  const courses = getCourses();
-  if (courses.length === 0) {
-    return res.status(400).json({ error: 'No courses loaded. Please load a dataset first.' });
-  }
+  const resolved = resolveScopeOr400(req, res);
+  if (!resolved) return;
+  const { scope, completed, effective } = resolved;
+  const courses = scope.scopedCourses;
 
-  const completed = new Set(completedCourseIds);
   const startTime = Date.now();
   let result;
 
   switch (algorithm.toLowerCase()) {
     case 'bfs':
-      result = bfsPlanner(courses, constraints, completed);
+      result = bfsPlanner(courses, effective, completed);
       break;
     case 'dfs':
-      result = dfsPlanner(courses, constraints, completed);
+      result = dfsPlanner(courses, effective, completed);
       break;
     case 'ucs':
-      result = ucsPlanner(courses, constraints, completed);
+      result = ucsPlanner(courses, effective, completed);
       break;
     case 'astar':
     case 'a*':
-      result = astarPlanner(courses, constraints, completed, goal);
+      result = astarPlanner(courses, effective, completed, goal);
       break;
     case 'csp':
-      result = cspPlanner(courses, constraints, completed);
+      result = cspPlanner(courses, effective, completed);
       break;
     default:
       return res.status(400).json({ error: `Unknown algorithm: ${algorithm}` });
@@ -66,42 +102,41 @@ router.post('/run', (req, res) => {
   const elapsed = Date.now() - startTime;
 
   res.json({
-    ...result,
+    ...finalizeScopedResult(result, scope, completed, effective),
     executionTimeMs: elapsed,
-    coursesAnalyzed: courses.length,
-    completedCount: completedCourseIds.length
+    coursesAnalyzed: scope.scopeCourseIds.length,
+    completedCount: (req.body.completedCourseIds || []).length
   });
 });
 
 // ── POST /api/planning/compare ─────────────────────────────
+// Both candidates solve the SAME resolved scope — scope equality is
+// structural (one scope object feeds both runs) and asserted in tests.
 router.post('/compare', (req, res) => {
   const {
     algorithmA = 'bfs',
     algorithmB = 'astar',
     goal = 'fastest',
-    constraints = {},
-    completedCourseIds = []
   } = req.body;
 
-  const courses = getCourses();
-  if (courses.length === 0) {
-    return res.status(400).json({ error: 'No courses loaded.' });
-  }
-
-  const completed = new Set(completedCourseIds);
+  const resolved = resolveScopeOr400(req, res);
+  if (!resolved) return;
+  const { scope, completed, effective } = resolved;
+  const courses = scope.scopedCourses;
 
   function runAlgorithm(name) {
     const start = Date.now();
     let result;
     switch (name.toLowerCase()) {
-      case 'bfs': result = bfsPlanner(courses, constraints, completed); break;
-      case 'dfs': result = dfsPlanner(courses, constraints, completed); break;
-      case 'ucs': result = ucsPlanner(courses, constraints, completed); break;
-      case 'astar': case 'a*': result = astarPlanner(courses, constraints, completed, goal); break;
-      case 'csp': result = cspPlanner(courses, constraints, completed); break;
-      default: result = bfsPlanner(courses, constraints, completed);
+      case 'bfs': result = bfsPlanner(courses, effective, completed); break;
+      case 'dfs': result = dfsPlanner(courses, effective, completed); break;
+      case 'ucs': result = ucsPlanner(courses, effective, completed); break;
+      case 'astar': case 'a*': result = astarPlanner(courses, effective, completed, goal); break;
+      case 'csp': result = cspPlanner(courses, effective, completed); break;
+      default: result = bfsPlanner(courses, effective, completed);
     }
-    return { ...result, executionTimeMs: Date.now() - start };
+    const finalized = finalizeScopedResult(result, scope, completed, effective);
+    return { ...finalized, executionTimeMs: Date.now() - start };
   }
 
   const resultA = runAlgorithm(algorithmA);
@@ -138,24 +173,25 @@ router.post('/compare', (req, res) => {
 });
 
 // ── POST /api/planning/agent ───────────────────────────────
+// The agent plans the resolved scope only: every candidate strategy runs on
+// the same scoped course set, never the full catalog.
 router.post('/agent', (req, res) => {
   const {
     goal = 'balanced',
-    constraints = {},
-    completedCourseIds = [],
     specializationTags = []
   } = req.body;
 
-  const courses = getCourses();
-  if (courses.length === 0) {
-    return res.status(400).json({ error: 'No courses loaded.' });
-  }
+  const resolved = resolveScopeOr400(req, res);
+  if (!resolved) return;
+  const { scope, completed, effective } = resolved;
 
-  const completed = new Set(completedCourseIds);
   const start = Date.now();
-  const result = intelligentAgent(courses, constraints, completed, goal, specializationTags);
+  const result = intelligentAgent(scope.scopedCourses, effective, completed, goal, specializationTags);
 
-  res.json({ ...result, executionTimeMs: Date.now() - start });
+  res.json({
+    ...finalizeScopedResult(result, scope, completed, effective),
+    executionTimeMs: Date.now() - start
+  });
 });
 
 // ── POST /api/planning/degree ──────────────────────────────
@@ -191,8 +227,23 @@ router.post('/degree', (req, res) => {
 });
 
 // ── GET /api/planning/graph ────────────────────────────────
+// Optional ?programId= / ?targetCourseId= returns the scoped subgraph used
+// by planning views (plus scope metadata). Without params it returns the
+// full catalog overview for dataset browsing only.
 router.get('/graph', (req, res) => {
-  const courses = getCourses();
+  const catalog = getCourses();
+  const { programId, targetCourseId } = req.query || {};
+  let courses = catalog;
+  let scope = null;
+
+  if (programId || targetCourseId) {
+    const resolved = resolvePlanningScope({ programId, targetCourseId }, catalog);
+    if (!resolved.ok) {
+      return res.status(400).json({ error: resolved.error.message, errorCode: resolved.error.code });
+    }
+    scope = resolved;
+    courses = resolved.scopedCourses;
+  }
 
   // Build nodes and edges for D3 visualization
   const nodes = courses.map(c => ({
@@ -230,7 +281,7 @@ router.get('/graph', (req, res) => {
     difficultyDistribution: getDifficultyDist(courses)
   };
 
-  res.json({ nodes, edges, stats });
+  res.json({ nodes, edges, stats, scope: scope ? scopeMeta(scope) : null });
 });
 
 function getDifficultyColor(d) {

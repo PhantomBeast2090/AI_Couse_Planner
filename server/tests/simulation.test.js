@@ -75,12 +75,15 @@ after(async () => {
 });
 
 describe('simulation API', () => {
+  const SELECTION = { targetCourseId: 'C' };
+
   test('fail-course reports impact and returns a valid revised plan', async () => {
     const { status, json } = await request('POST', '/api/simulation/fail-course', {
       failedCourseId: 'B',
       completedCourseIds: ['A', 'B'],
       goal: 'balanced',
       constraints: { ...DEFAULT_CONSTRAINTS },
+      selection: SELECTION,
     });
     assert.strictEqual(status, 200);
     assert.strictEqual(json.scenario, 'fail-course');
@@ -88,6 +91,7 @@ describe('simulation API', () => {
     assert.strictEqual(json.impact.blockedCount, 1);
     assert.deepStrictEqual(json.impact.directlyBlocked.map((c) => c.id), ['C']);
     assert.strictEqual(typeof json.executionTimeMs, 'number');
+    assert.strictEqual(json.scope.targetCourseId, 'C');
     // Failed course B is back in the plan; A stays completed.
     assertValidRevisedPlan(json.revisedPlan, FIXTURE, ['A']);
     const planned = json.revisedPlan.semesterPlan.flatMap((s) => s.courses.map((c) => c.id));
@@ -98,15 +102,36 @@ describe('simulation API', () => {
   test('fail-course requires failedCourseId', async () => {
     const { status, json } = await request('POST', '/api/simulation/fail-course', {
       completedCourseIds: [],
+      selection: SELECTION,
     });
     assert.strictEqual(status, 400);
     assert.ok(json.error);
+  });
+
+  test('fail-course requires a selection (no global fallback)', async () => {
+    const { status, json } = await request('POST', '/api/simulation/fail-course', {
+      failedCourseId: 'B',
+      completedCourseIds: [],
+    });
+    assert.strictEqual(status, 400);
+    assert.strictEqual(json.errorCode, 'SELECTION_REQUIRED');
   });
 
   test('fail-course returns 404 for unknown courses', async () => {
     const { status, json } = await request('POST', '/api/simulation/fail-course', {
       failedCourseId: 'GHOST',
       completedCourseIds: [],
+      selection: SELECTION,
+    });
+    assert.strictEqual(status, 404);
+    assert.ok(json.error);
+  });
+
+  test('fail-course rejects courses outside the selected scope', async () => {
+    const { status, json } = await request('POST', '/api/simulation/fail-course', {
+      failedCourseId: 'C',
+      completedCourseIds: [],
+      selection: { targetCourseId: 'B' }, // scope is {A, B}
     });
     assert.strictEqual(status, 404);
     assert.ok(json.error);
@@ -117,6 +142,7 @@ describe('simulation API', () => {
       completedCourseIds: ['A'],
       goal: 'balanced',
       constraints: { ...DEFAULT_CONSTRAINTS },
+      selection: SELECTION,
     });
     assert.strictEqual(status, 200);
     assert.strictEqual(json.scenario, 'complete');
@@ -131,6 +157,7 @@ describe('simulation API', () => {
       completedCourseIds: ['A', 'B', 'C'],
       goal: 'balanced',
       constraints: { ...DEFAULT_CONSTRAINTS },
+      selection: SELECTION,
     });
     assert.strictEqual(status, 200);
     assert.strictEqual(json.scenario, 'complete');
@@ -146,6 +173,7 @@ describe('simulation API', () => {
       excludeCourseIds: ['C'],
       goal: 'balanced',
       constraints: { ...DEFAULT_CONSTRAINTS },
+      selection: SELECTION,
     });
     assert.strictEqual(status, 200);
     assert.strictEqual(json.scenario, 'skip-elective');
@@ -158,8 +186,19 @@ describe('simulation API', () => {
     const { status, json } = await request('POST', '/api/simulation/what-if', {
       completedCourseIds: [],
       excludeCourseIds: ['A', 'B', 'C'],
+      selection: SELECTION,
     });
     assert.strictEqual(status, 400);
     assert.ok(json.error);
+  });
+
+  test('what-if rejects exclusions outside the selected scope', async () => {
+    const { status, json } = await request('POST', '/api/simulation/what-if', {
+      completedCourseIds: [],
+      excludeCourseIds: ['ZZZ'],
+      selection: SELECTION,
+    });
+    assert.strictEqual(status, 400);
+    assert.strictEqual(json.errorCode, 'SCOPE_VIOLATION');
   });
 });

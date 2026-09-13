@@ -2,11 +2,29 @@
 
 Base URL (local): `http://localhost:5050/api`. All bodies and responses are JSON. Examples below are abbreviated to the fields that matter.
 
+## Planning scope (applies to every planning/graph/simulation route)
+
+The selected program/course defines the planning scope. Planning, graph visualization, algorithm comparison, timeline generation, workload analysis, and scenario planning operate only within that scope.
+
+Every planning request carries an explicit selection — either
+`{ "selection": { "programId": "..." } }` or `{ "selection": { "targetCourseId": "..." } }`
+(top-level `programId` / `targetCourseId` are accepted as shorthand). The backend resolves the
+authoritative scope server-side via `resolvePlanningScope` and never falls back to the full
+catalog: missing/invalid selection → `400` with `errorCode` (`SELECTION_REQUIRED`,
+`UNKNOWN_PROGRAM`, `UNKNOWN_COURSE`, `MISSING_DEPENDENCIES`, `CYCLIC_SCOPE`).
+
+Successful planning responses include `scope` metadata
+(`kind`, `programId`/`targetCourseId`, `selectedName`, `size`, `completed`, `remaining`,
+`edgeCount`, `criticalDepth`) plus `validation` from the shared validator. Plans that exceed
+8 semesters are returned as structured partials (`success: false`,
+`reason: "PLAN_EXCEEDS_8_SEMESTERS"`, first ≤8 semesters kept, overflow listed in
+`unplannedCourses`) — never a Semester 9+.
+
 ## Planning
 
 ### POST `/api/planning/run`
 
-Run one planning algorithm. `algorithm` is case-insensitive (`bfs`, `dfs`, `ucs`, `astar`/`a*`, `csp`); unknown names return `400`.
+Run one planning algorithm **on the resolved scope**. `algorithm` is case-insensitive (`bfs`, `dfs`, `ucs`, `astar`/`a*`, `csp`); unknown names return `400`.
 
 Request:
 
@@ -15,7 +33,8 @@ Request:
   "algorithm": "astar",
   "goal": "balanced",
   "constraints": { "maxCredits": 15, "maxHardCourses": 2, "maxCoursesPerSemester": 4 },
-  "completedCourseIds": ["cs101"]
+  "completedCourseIds": ["cs101"],
+  "selection": { "programId": "bsc-cs" }
 }
 ```
 
@@ -32,8 +51,10 @@ Response (planner result plus timing/context):
   "totalSemesters": 3,
   "steps": [{ "action": "ASTAR_EXPAND", "message": "..." }],
   "executionTimeMs": 4,
-  "coursesAnalyzed": 45,
-  "completedCount": 1
+  "coursesAnalyzed": 24,
+  "completedCount": 1,
+  "scope": { "kind": "program", "programId": "bsc-cs", "size": 24 },
+  "validation": { "valid": true, "errors": [] }
 }
 ```
 
@@ -41,7 +62,7 @@ On unsatisfiable input the planner returns `success: false` with `error` and `un
 
 ### POST `/api/planning/compare`
 
-Run two algorithms over the **same** input and get a metric summary.
+Run two algorithms over the **same resolved scope** (one scope object feeds both candidates, so scope equality is structural) and get a metric summary.
 
 Request:
 
@@ -51,7 +72,8 @@ Request:
   "algorithmB": "astar",
   "goal": "fastest",
   "constraints": {},
-  "completedCourseIds": []
+  "completedCourseIds": [],
+  "selection": { "targetCourseId": "ml401" }
 }
 ```
 
@@ -71,7 +93,7 @@ Response:
 
 ### POST `/api/planning/agent`
 
-Run the goal-based intelligent planning agent (see `docs/intelligent-agent.md`).
+Run the goal-based intelligent planning agent **on the resolved scope** (see `docs/intelligent-agent.md`). Every candidate strategy plans the same scoped course set.
 
 Request:
 
@@ -80,7 +102,8 @@ Request:
   "goal": "balanced",
   "constraints": {},
   "completedCourseIds": ["cs101"],
-  "specializationTags": ["AI", "ML"]
+  "specializationTags": ["AI", "ML"],
+  "selection": { "programId": "ai-ml" }
 }
 ```
 
@@ -88,7 +111,7 @@ Response includes `chosenStrategy`, `allStrategiesEvaluated` (`strategy`, `semes
 
 ### GET `/api/planning/graph`
 
-Graph data for the d3 visualization.
+Graph data for the d3 visualization. Optional `?programId=` / `?targetCourseId=` returns the scoped subgraph used by planning views (plus `scope` metadata); without params it returns the full catalog overview for dataset browsing only.
 
 Response (illustrative values measured from the bundled 82-course dataset):
 
@@ -113,13 +136,15 @@ Response (illustrative values measured from the bundled 82-course dataset):
 | POST | `/api/courses/load-default` | Load the curated degree-track subset. |
 | POST | `/api/courses/clear` | Empty the store. |
 
-## Simulation (what-if scenarios)
+## Simulation (what-if scenarios, all scope-aware)
+
+Every simulation request carries `selection` and operates only on the resolved scope; fail/exclude ids outside the scope are rejected with `400`.
 
 | Route | Body | Returns |
 |---|---|---|
-| POST `/api/simulation/fail-course` | `failedCourseId` (required), `completedCourseIds`, `goal`, `constraints` | Failed-course info, directly/transitively blocked courses, delay estimate, and a revised agent plan. |
-| POST `/api/simulation/complete` | `completedCourseIds`, `goal`, `constraints` | Progress percent, remaining count, and a revised agent plan (or graduation message when nothing remains). |
-| POST `/api/simulation/what-if` | `scenario`, `completedCourseIds`, `additionalCompletedIds`, `excludeCourseIds`, `goal`, `constraints` | Agent result under hypothetical completions/exclusions. |
+| POST `/api/simulation/fail-course` | `failedCourseId` (required, must be in scope), `completedCourseIds`, `goal`, `constraints`, `selection` | Failed-course info, in-scope blocked courses, delay estimate, and a scoped revised plan. |
+| POST `/api/simulation/complete` | `completedCourseIds`, `goal`, `constraints`, `selection` | Scope-relative progress, remaining count, and a scoped revised plan (or graduation message when nothing remains). |
+| POST `/api/simulation/what-if` | `scenario`, `completedCourseIds`, `additionalCompletedIds`, `excludeCourseIds` (must be in scope), `goal`, `constraints`, `selection` | Scoped agent result under hypothetical completions/exclusions. |
 
 ## Health
 

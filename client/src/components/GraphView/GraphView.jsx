@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
-import { useApp } from '../../store/AppContext';
+import { useApp, buildSelection } from '../../store/AppContext';
+import ScopePicker from '../shared/ScopePicker';
 
 const DIFF_COLORS = { 1: '#00ff88', 2: '#88ff00', 3: '#ffff00', 4: '#ff8800', 5: '#ff0044' };
 const GROUP_COLORS = {
@@ -12,15 +13,17 @@ const GROUP_COLORS = {
 
 export default function GraphView() {
   const svgRef = useRef(null);
-  const { graphData, graphLoaded, refreshGraph, completedCourseIds } = useApp();
+  const { graphData, graphLoaded, refreshGraph, completedCourseIds, selectedProgramId, targetCourseId } = useApp();
   const [tooltip, setTooltip] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
   const simulationRef = useRef(null);
   const selectedIdRef = useRef(null);
 
   useEffect(() => {
-    if (!graphLoaded) refreshGraph();
-  }, [graphLoaded, refreshGraph]);
+    // Scoped when a selection exists (graph shows the planning scope);
+    // otherwise the full catalog overview for dataset browsing.
+    if (!graphLoaded) refreshGraph(buildSelection({ selectedProgramId, targetCourseId }));
+  }, [graphLoaded, refreshGraph, selectedProgramId, targetCourseId]);
 
   const buildGraph = useCallback(() => {
     if (!graphData?.nodes?.length || !svgRef.current) return;
@@ -205,16 +208,21 @@ export default function GraphView() {
   }, []);
 
   const stats = graphData?.stats || {};
+  const graphScope = graphData?.scope || null;
 
   return (
     <div className="flex flex-col h-full gap-4 max-w-7xl mx-auto">
+      <ScopePicker compact />
       {/* Controls */}
       <div className="flex items-center gap-4 flex-wrap">
         <h2 className="text-xs font-bold text-cyan-400 uppercase tracking-widest font-mono">◎ Prerequisite Graph</h2>
+        {graphScope
+          ? <span className="text-[10px] font-mono text-cyan-500">Scoped: {graphScope.selectedName} · {graphScope.size} courses · {graphScope.edgeCount} relationships</span>
+          : <span className="text-[10px] font-mono text-cyan-700">Full catalog overview — select a scope to plan</span>}
         <div className="flex gap-2 ml-auto">
           <span className="tag tag-cyan">{stats.totalCourses || 0} nodes</span>
           <span className="tag tag-blue">{stats.totalEdges || 0} edges</span>
-          <button onClick={refreshGraph} className="btn-neon text-[10px] py-1 px-3">↺ REFRESH</button>
+          <button onClick={() => refreshGraph(buildSelection({ selectedProgramId, targetCourseId }))} className="btn-neon text-[10px] py-1 px-3">↺ REFRESH</button>
         </div>
       </div>
 

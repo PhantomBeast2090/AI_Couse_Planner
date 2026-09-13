@@ -23,7 +23,8 @@ const {
   topologicalSort,
 } = require('../utils/graphUtils');
 const { checkTriviallyImpossible, validateTimeline } = require('../utils/planValidator');
-const { getProgram, buildEligibleSet, DEGREE_LIMITS } = require('../data/programs');
+const { DEGREE_LIMITS } = require('../data/programs');
+const { resolvePlanningScope } = require('../utils/scopeResolver');
 
 /** Downstream unlock counts within the eligible subgraph (dependents). */
 function unlockCounts(eligible) {
@@ -83,31 +84,29 @@ function emptyResult(reason, message, extra = {}) {
 
 /**
  * Plan a degree timeline for a catalog program id.
+ * Scope resolution is delegated to the shared resolver (no duplication);
+ * resolver errors are mapped onto the stable degree reason codes.
  */
 function planDegreeTimeline(catalog, programId, constraints = {}, completedCourses = new Set(), goal = 'balanced', specializationTags = []) {
-  if (!programId || typeof programId !== 'string') {
-    return emptyResult('INVALID_PROGRAM', 'A valid program/degree must be selected.', { programId: programId || null, programName: null });
-  }
-  const program = getProgram(programId);
-  if (!program) {
-    return emptyResult('PROGRAM_NOT_FOUND', `Unknown program "${programId}".`, { programId, programName: null });
-  }
-
-  const { eligible, autoIncluded, missingRequired } = buildEligibleSet(program, catalog || []);
-  if (missingRequired.length > 0) {
-    return emptyResult(
-      'PROGRAM_COURSES_MISSING',
-      `Program courses missing from catalog: ${missingRequired.join(', ')}.`,
-      {
-        programId, programName: program.name,
-        unplannedCourses: missingRequired.map((id) => ({ id, name: id, reason: 'required course missing from catalog' })),
-      }
-    );
+  const scope = resolvePlanningScope({ programId }, catalog || [], completedCourses);
+  if (!scope.ok) {
+    const reasonMap = {
+      SELECTION_REQUIRED: 'INVALID_PROGRAM',
+      UNKNOWN_PROGRAM: 'PROGRAM_NOT_FOUND',
+      MISSING_DEPENDENCIES: 'PROGRAM_COURSES_MISSING',
+      CYCLIC_SCOPE: 'CYCLIC_PREREQUISITES',
+    };
+    const reason = reasonMap[scope.error.code] || 'SCOPE_RESOLUTION_FAILED';
+    return emptyResult(reason, scope.error.message, {
+      programId: programId || null,
+      programName: null,
+      unplannedCourses: (scope.error.missing || []).map((id) => ({ id, name: id, reason: 'required course missing from catalog' })),
+    });
   }
 
   return planTimeline(
-    eligible, program.requiredCourseIds,
-    { programId: program.id, programName: program.name, autoIncluded },
+    scope.scopedCourses, scope.requiredIds,
+    { programId: scope.programId, programName: scope.selectedName, autoIncluded: scope.autoIncluded },
     constraints, completedCourses, goal, specializationTags
   );
 }

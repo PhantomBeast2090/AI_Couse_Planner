@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { useApp } from '../../store/AppContext';
+import { useApp, buildSelection, hasSelection } from '../../store/AppContext';
 import { runAlgorithm } from '../../utils/api';
+import ScopePicker, { ScopeLine } from '../shared/ScopePicker';
 
 const ALGORITHMS = [
   { id: 'bfs',   label: 'BFS',  full: 'Breadth-First Search',  color: '#00ffff', desc: 'Explores level by level — aims for fewer semesters' },
@@ -14,7 +15,7 @@ const GOALS = ['fastest', 'easiest', 'balanced', 'specialization'];
 const STEP_COLORS = { SCHEDULE:'#00ff88', DEFER:'#ff8800', DEADLOCK:'#ff0044', ASTAR_GOAL:'#ffff00', CSP_SUCCESS:'#00ff88', CSP_UNDO:'#ff0088', DFS_VISIT:'#0088ff', UCS_ENQUEUE:'#00ffff' };
 
 export default function AlgorithmViz() {
-  const { courses, completedCourseIds, constraints, notify } = useApp();
+  const { courses, completedCourseIds, constraints, notify, selectedProgramId, targetCourseId } = useApp();
   const [selectedAlg, setSelectedAlg] = useState('bfs');
   const [selectedGoal, setSelectedGoal] = useState('fastest');
   const [result, setResult] = useState(null);
@@ -26,15 +27,18 @@ export default function AlgorithmViz() {
   const stepsRef = useRef([]);
 
   const alg = ALGORITHMS.find(a => a.id === selectedAlg);
+  const selection = buildSelection({ selectedProgramId, targetCourseId });
+  const selectionReady = hasSelection({ selectedProgramId, targetCourseId });
 
   const handleRun = async () => {
     if (!courses.length) return notify('Load a dataset first', 'error');
+    if (!selectionReady) return notify('Select a program or target course first', 'error');
     setLoading(true);
     setResult(null);
     setCurrentStep(-1);
     setPlaying(false);
     try {
-      const res = await runAlgorithm(selectedAlg, selectedGoal, constraints, completedCourseIds);
+      const res = await runAlgorithm(selectedAlg, selectedGoal, constraints, completedCourseIds, selection);
       setResult(res.data);
       stepsRef.current = res.data.steps || [];
       notify(`✅ ${selectedAlg.toUpperCase()} complete — ${res.data.totalSemesters} semesters, ${res.data.nodesExplored?.length || 0} nodes explored`, 'success');
@@ -79,6 +83,7 @@ export default function AlgorithmViz() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
+      <ScopePicker />
       {/* Controls */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Algorithm selector */}
@@ -125,6 +130,7 @@ export default function AlgorithmViz() {
           {/* Stats */}
           {result && (
             <div className="tron-card p-4 grid grid-cols-3 gap-3">
+              <div className="col-span-3"><ScopeLine scope={result.scope} /></div>
               {[
                 { label: 'Semesters', value: result.totalSemesters, color: '#00ffff' },
                 { label: 'Explored', value: result.nodesExplored?.length || 0, color: '#0088ff' },
@@ -138,7 +144,7 @@ export default function AlgorithmViz() {
             </div>
           )}
 
-          <button onClick={handleRun} disabled={loading}
+          <button onClick={handleRun} disabled={loading || !selectionReady}
             className="btn-neon btn-neon-solid w-full py-3 text-sm"
             style={{ borderColor: alg?.color, color: alg?.color }}>
             {loading ? (

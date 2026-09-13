@@ -53,6 +53,28 @@ Implementation: `server/utils/graphUtils.js` (`buildAdjacencyList`, `topological
 
 Graph statistics for visualization come from `GET /api/planning/graph` (nodes with difficulty color/group, edges, totals, tag and difficulty distributions).
 
+## Planning Scope (single source of truth)
+
+The selected program/course defines the planning scope. Planning, graph visualization, algorithm comparison, timeline generation, workload analysis, and scenario planning operate only within that scope.
+
+```text
+Selection (programId XOR targetCourseId)
+   ↓
+resolvePlanningScope(selection, catalog)   [server/utils/scopeResolver.js — the ONLY scope logic]
+   → scoped courses + edges + stats (or a no-fallback error)
+   ↓
+scopedGraph → planner (BFS/DFS/UCS/A*/CSP/agent/degree, unchanged)
+   ↓
+shared cap post-check (8 semesters / 8 per semester, never truncated silently)
+   ↓
+scoped plan + scope metadata + validation → UI
+```
+
+- **Program mode:** explicit curriculum in `server/data/programs.js` plus auto-included prerequisite ancestors (the dataset has no degree field; tag overlap cannot define a degree).
+- **Individual-course mode:** target course plus its transitive prerequisite closure (`getAllAncestors`) — ancestors only, never unrelated courses or dependents.
+- **No global fallback:** missing/invalid/unresolvable selection returns `SELECTION_REQUIRED` / `UNKNOWN_*` / `MISSING_DEPENDENCIES` / `CYCLIC_SCOPE`. The full catalog is used only for dataset CRUD and the graph-overview browser.
+- The frontend is never authoritative: `AppContext` holds `selectedProgramId`/`targetCourseId`, sends them with every call, clears derived results on change, and disables planning buttons until a selection exists. The backend re-resolves and validates scope server-side.
+
 ## Module Map
 
 | Path | Responsibility |
@@ -63,18 +85,18 @@ Graph statistics for visualization come from `GET /api/planning/graph` (nodes wi
 | `server/data/` | `sampleCourses.js` — the large DAG dataset. |
 | `server/data/` | `programs.js` — degree catalog (explicit required-course lists + 8/8 hard caps), since the dataset has no degree field. |
 | `server/algorithms/` | `degreePlanner.js` — program-scoped 8-semester scheduler reusing graph utils, goal semantics and the shared timeline validator. |
-| `server/utils/` | `graphUtils.js` (graph ops), `planValidator.js` (shared correctness rules used by planners, tests, benchmark), `defaultTrack.js` (degree-track subset). |
-| `server/tests/` | `helpers.js`, `algorithms.test.js`, `agent.test.js`, `api.test.js` — `node:test`, zero new dependencies. |
+| `server/utils/` | `graphUtils.js` (graph ops), `planValidator.js` (shared correctness rules used by planners, tests, benchmark), `scopeResolver.js` (single scope-resolution + route post-check), `defaultTrack.js` (degree-track subset). |
+| `server/tests/` | `helpers.js`, `algorithms.test.js`, `agent.test.js`, `api.test.js`, `scope.test.js`, `simulation.test.js`, `degree.test.js` — `node:test`, zero new dependencies. |
 | `server/scripts/benchmark.js` | Reproducible cross-algorithm benchmark; method in `docs/evaluation.md`. |
 | `client/src` | `store/AppContext.jsx` (global state, API calls), `utils/api.js` (axios client), `components/` (Dashboard, CourseManager, GraphView (d3 force graph), AlgorithmViz (step-trace playback), SemesterTimeline, ComparisonMode, WhatIfSimulator, AgentPlanner). |
 
-## Request Flows
+## Request Flows (all scope-first)
 
-- **Single plan:** `AlgorithmViz`/`SemesterTimeline` → `POST /api/planning/run` → chosen planner → `{ semesterPlan, nodesExplored, steps, executionTimeMs, ... }` → semester cards + step-trace playback + workload bars.
-- **Comparison:** `ComparisonMode` → `POST /api/planning/compare` → two planners on identical input → metric table + winner badges + side-by-side plans.
-- **Agent:** `AgentPlanner` → `POST /api/planning/agent` → `intelligentAgent()` → chosen plan + strategy scores + workload analysis + recommendations + `agentLog` → strategy bars, plan/workload/recommendations/log tabs.
-- **Graph:** `GraphView` → `GET /api/planning/graph` → d3 force-directed prerequisite graph with difficulty rings, group colors, tooltips, selection detail.
-- **What-if:** `WhatIfSimulator` → `POST /api/simulation/*` → revised plan under failed/completed/excluded-course scenarios.
+- **Single plan:** `AlgorithmViz`/`SemesterTimeline` (+ `ScopePicker` selection) → `POST /api/planning/run` → scope resolution → chosen planner on scoped set → cap post-check → `{ scope, semesterPlan, validation, ... }` → semester cards + step-trace playback + workload bars.
+- **Comparison:** `ComparisonMode` → `POST /api/planning/compare` → one scope feeds both planners → metric table + winner badges + side-by-side scoped plans.
+- **Agent:** `AgentPlanner` → `POST /api/planning/agent` → `intelligentAgent()` on the scoped set (every candidate plans the same scope) → chosen plan + strategy scores + workload analysis + recommendations + `agentLog`.
+- **Graph:** `GraphView` → `GET /api/planning/graph` (+ scope params when selected) → scoped subgraph or full-catalog overview.
+- **What-if:** `WhatIfSimulator` → `POST /api/simulation/*` (+ selection; membership enforced) → scoped revised plan.
 
 ## Design Rationale
 

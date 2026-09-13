@@ -28,9 +28,9 @@ specialization -> A* + BFS + UCS
 
 Unknown goals fall back to `['astar', 'bfs']`. The mapping is a fixed table (`strategyMap`), chosen for transparency over cleverness.
 
-### 3. Action — run every candidate
+### 3. Action — run every candidate on the resolved scope
 
-Each candidate planner runs against the **same** courses, constraints and completed set, timed with `Date.now()`. Candidates are the real planners (`bfsPlanner`, `ucsPlanner`, `astarPlanner`), not simulations.
+Each candidate planner runs against the **same scoped courses**, constraints and completed set, timed with `Date.now()`. Candidates are the real planners (`bfsPlanner`, `ucsPlanner`, `astarPlanner`), not simulations. The agent never sees the full catalog — routes hand it the resolved scope only.
 
 ### 4. Utility Evaluation — `scorePlan(plan, goal, tags)`
 
