@@ -56,7 +56,8 @@ class MinHeap {
 }
 
 /**
- * UCS-based planner: minimizes cumulative difficulty (easiest path)
+ * UCS-based planner: prefers lower-difficulty courses first (cost-aware greedy).
+ * Cost = course difficulty; no global optimality is claimed.
  * @param {Array} courses
  * @param {Object} constraints
  * @param {Set} completedCourses

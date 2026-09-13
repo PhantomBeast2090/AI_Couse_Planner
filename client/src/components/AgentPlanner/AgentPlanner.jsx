@@ -31,7 +31,7 @@ export default function AgentPlanner() {
           </div>
           <div>
             <div className="text-sm font-bold text-cyan-300 font-mono">INTELLIGENT PLANNING AGENT</div>
-            <div className="text-[10px] text-cyan-700 font-mono">Evaluates multiple strategies, picks optimal plan by utility score</div>
+            <div className="text-[10px] text-cyan-700 font-mono">Evaluates multiple strategies, picks the highest-utility plan</div>
           </div>
         </div>
 
@@ -189,7 +189,7 @@ export default function AgentPlanner() {
                 </div>
               )) : (
                 <div className="tron-card p-8 text-center text-cyan-700 font-mono text-sm">
-                  ✓ No issues found — plan looks optimal!
+                  ✓ No issues found — plan looks good!
                 </div>
               )}
             </div>

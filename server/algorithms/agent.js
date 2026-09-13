@@ -1,16 +1,18 @@
 /**
- * Intelligent Agent for Optimal Academic Planning
- * 
- * The agent operates as a goal-based, utility-maximizing agent.
- * 
- * It chooses the BEST algorithm and configuration based on:
+ * Intelligent Agent for Academic Planning
+ *
+ * The agent operates as a goal-based, utility-maximizing agent: it scores
+ * candidate plans per goal and picks the highest-utility one. "Best" below
+ * always means highest utility score, never a proven global optimum.
+ *
+ * It chooses the BEST-scoring algorithm and configuration based on:
  *   - User's optimization goal
  *   - Course graph properties
  *   - Constraint severity
- * 
+ *
  * Optimization Goals:
- *   1. 'fastest'       → Minimize number of semesters (uses BFS-style)
- *   2. 'easiest'       → Minimize cumulative difficulty (uses UCS)
+ *   1. 'fastest'       → Prefers fewer semesters (uses BFS-style)
+ *   2. 'easiest'       → Prefers lower cumulative difficulty (uses UCS)
  *   3. 'balanced'      → Even workload distribution (uses A*)
  *   4. 'specialization'→ Front-load tagged courses (custom priority)
  * 

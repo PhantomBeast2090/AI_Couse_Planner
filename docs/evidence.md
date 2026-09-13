@@ -16,7 +16,15 @@ Implementations: `server/algorithms/{bfs,dfs,ucs,astar,csp}.js`, documented per-
 
 ## Test Methodology
 
-`docs/testing.md` + `server/tests/`. Run `cd server && npm test`. Tests assert prerequisite validity, constraint respect and safe failure through the shared `server/utils/planValidator.js`, not step-text snapshots.
+`docs/testing.md` + `server/tests/`. Run `cd server && npm test` (currently 112 tests: planner correctness, agent decisions, planning routes, simulation routes). Tests assert prerequisite validity, constraint respect and safe failure through the shared `server/utils/planValidator.js`, not step-text snapshots.
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on push to `main` and on pull requests: backend `npm ci` → `npm test` → `npm run benchmark`, plus frontend `npm ci` → `npm run lint` → `npm run build` (Node 20). No extra dependencies were added for CI.
+
+## Frontend Confidence
+
+Deliberately no frontend unit-test framework: every module under `client/src/utils` and `client/src/store` depends on React/axios/Vite, and all planning logic lives server-side where it is tested. The current automated smoke checks are the production build (`cd client && npm run build`) and lint (`npm run lint`), both enforced by CI.
 
 ## Reproducible Benchmark
 

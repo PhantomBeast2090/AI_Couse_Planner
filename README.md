@@ -36,7 +36,7 @@ Details, module map and request flows: [`docs/architecture.md`](docs/architectur
 - **Node:** a course (`id`, `name`, `credits`, `difficulty 1–5`, `tags`, `prerequisites`).
 - **Edge:** `prerequisite → course` (directed; the graph must be a DAG — cycles are detected and rejected).
 - **Rule:** a prerequisite must be completed in a **strictly earlier semester**, never the same one. One shared validator (`server/utils/planValidator.js`) enforces this for every planner, test and benchmark.
-- Utilities (`topological sort`, frontier computation, critical-path depth, cycle detection) live in `server/utils/graphUtils.js`; the bundled dataset (`server/data/sampleCourses.js`, ~90 courses) is a valid DAG with depth-derived semester hints.
+- Utilities (`topological sort`, frontier computation, critical-path depth, cycle detection) live in `server/utils/graphUtils.js`; the bundled dataset (`server/data/sampleCourses.js`, 82 courses) is a valid DAG with depth-derived semester hints.
 
 ## 6. Algorithms Implemented
 

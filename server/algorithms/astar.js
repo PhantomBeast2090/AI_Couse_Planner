@@ -54,8 +54,9 @@ class MinHeap {
 }
 
 /**
- * Heuristic: estimated minimum additional semesters needed
- * Uses critical path (longest prerequisite chain) of remaining courses
+ * Heuristic: estimated remaining semesters needed.
+ * Uses critical path (longest prerequisite chain) of remaining courses.
+ * This is a rough estimate, not a proven admissible heuristic (see above).
  */
 function heuristic(remaining, courses) {
   if (remaining.length === 0) return 0;
@@ -66,7 +67,7 @@ function heuristic(remaining, courses) {
     const chainLen = calculateCriticalPath(courseId, courses, memo);
     maxChain = Math.max(maxChain, chainLen);
   });
-  return maxChain; // admissible: at least 'maxChain' more semesters needed
+  return maxChain; // estimate: a chain of length N needs at least N semesters
 }
 
 /**

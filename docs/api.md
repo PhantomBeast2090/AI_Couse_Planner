@@ -90,13 +90,13 @@ Response includes `chosenStrategy`, `allStrategiesEvaluated` (`strategy`, `semes
 
 Graph data for the d3 visualization.
 
-Response:
+Response (illustrative values measured from the bundled 82-course dataset):
 
 ```json
 {
   "nodes": [{ "id": "cs101", "name": "...", "credits": 3, "difficulty": 1, "tags": ["CS"], "prerequisites": [], "radius": 26, "color": "#00ff88", "group": "CS" }],
   "edges": [{ "source": "cs101", "target": "cs201", "id": "cs101->cs201" }],
-  "stats": { "totalCourses": 93, "totalEdges": 120, "totalCredits": 275, "avgDifficulty": 3.21, "tagDistribution": {}, "difficultyDistribution": {} }
+  "stats": { "totalCourses": 82, "totalEdges": 132, "totalCredits": 246, "avgDifficulty": 3.46, "tagDistribution": {}, "difficultyDistribution": {} }
 }
 ```
 

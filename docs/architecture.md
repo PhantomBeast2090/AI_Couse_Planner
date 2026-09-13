@@ -49,7 +49,7 @@ A course is a node; each prerequisite is a directed edge:
 Prerequisite ---> Course
 ```
 
-Implementation: `server/utils/graphUtils.js` (`buildAdjacencyList`, `topologicalSort` via Kahn's algorithm, `prerequisitesSatisfied`, `getAvailableCourses`, `calculateCriticalPath`, ancestor/reachability helpers). The dataset in `server/data/sampleCourses.js` (~90 courses across Math, CS, Systems, AI/ML, DL, NLP, CV, RL, Data Science, electives, capstone) is a DAG; `recommendedSemester` values are derived from prerequisite depth. A curated default degree track is built by `server/utils/defaultTrack.js`.
+Implementation: `server/utils/graphUtils.js` (`buildAdjacencyList`, `topologicalSort` via Kahn's algorithm, `prerequisitesSatisfied`, `getAvailableCourses`, `calculateCriticalPath`, ancestor/reachability helpers). The dataset in `server/data/sampleCourses.js` (82 courses across Math, CS, Systems, AI/ML, DL, NLP, CV, RL, Data Science, electives, capstone) is a DAG; `recommendedSemester` values are derived from prerequisite depth. A curated default degree track is built by `server/utils/defaultTrack.js`.
 
 Graph statistics for visualization come from `GET /api/planning/graph` (nodes with difficulty color/group, edges, totals, tag and difficulty distributions).
 
