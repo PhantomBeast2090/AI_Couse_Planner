@@ -6,7 +6,8 @@
  * Tends to create long sequential plans - useful for specialization paths.
  */
 
-const { prerequisitesSatisfied } = require('../utils/graphUtils');
+const { prerequisitesSatisfied, topologicalSort } = require('../utils/graphUtils');
+const { checkTriviallyImpossible } = require('../utils/planValidator');
 
 /**
  * DFS-based course planner using recursive backtracking
@@ -28,9 +29,81 @@ function dfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
   const completed = new Set(completedCourses);
   const visited = new Set([...completedCourses]);
 
-  // Build course map for quick lookup
+  // Deduplicate by id (first occurrence wins) and index for quick lookup.
   const courseMap = {};
-  courses.forEach(c => { courseMap[c.id] = c; });
+  const deduped = [];
+  courses.forEach(c => {
+    if (!courseMap[c.id]) {
+      courseMap[c.id] = c;
+      deduped.push(c);
+    }
+  });
+
+  // Fail fast when a single remaining course alone violates the limits
+  // (DFS would otherwise schedule it anyway and emit an invalid plan).
+  const impossible = checkTriviallyImpossible(deduped, completedCourses, constraints);
+  if (impossible) {
+    steps.push({ action: 'DEADLOCK', message: impossible });
+    return {
+      algorithm: 'DFS',
+      success: false,
+      error: impossible,
+      unplanned: deduped.filter(c => !completed.has(c.id)).map(c => c.id),
+      semesterPlan: [],
+      nodesExplored: [],
+      totalSemesters: 0,
+      totalCourses: courses.length - completedCourses.size,
+      steps
+    };
+  }
+
+  // Fail safely on cyclic graphs instead of silently emitting an invalid plan.
+  if (topologicalSort(deduped.filter(c => !completed.has(c.id))) === null && deduped.some(c => !completed.has(c.id))) {
+    // topologicalSort returns null only when remaining courses contain a cycle
+    // (it returns [] for the empty set, which is not a cycle).
+    const remainingIds = deduped.filter(c => !completed.has(c.id)).map(c => c.id);
+    steps.push({
+      action: 'DEADLOCK',
+      message: 'Cyclic prerequisites detected - no valid ordering exists',
+      remaining: remainingIds
+    });
+    return {
+      algorithm: 'DFS',
+      success: false,
+      error: 'Cyclic prerequisites detected',
+      unplanned: remainingIds,
+      semesterPlan: [],
+      nodesExplored: [],
+      totalSemesters: 0,
+      totalCourses: courses.length - completedCourses.size,
+      steps
+    };
+  }
+
+  // Fail safely when a prerequisite id does not match any known course.
+  const knownIds = new Set(deduped.map(c => c.id));
+  const unknownPrereqs = [...new Set(
+    deduped.filter(c => !completed.has(c.id)).flatMap(c => c.prerequisites || []).filter(p => !knownIds.has(p) && !completed.has(p))
+  )];
+  if (unknownPrereqs.length > 0) {
+    const remainingIds = deduped.filter(c => !completed.has(c.id)).map(c => c.id);
+    steps.push({
+      action: 'DEADLOCK',
+      message: `Unknown prerequisite id(s): ${unknownPrereqs.join(', ')}`,
+      remaining: remainingIds
+    });
+    return {
+      algorithm: 'DFS',
+      success: false,
+      error: `Unknown prerequisite id(s): ${unknownPrereqs.join(', ')}`,
+      unplanned: remainingIds,
+      semesterPlan: [],
+      nodesExplored: [],
+      totalSemesters: 0,
+      totalCourses: courses.length - completedCourses.size,
+      steps
+    };
+  }
 
   // DFS visit order - build an ordered visit list
   const visitOrder = [];
@@ -69,7 +142,7 @@ function dfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
   }
 
   // Run DFS from each unvisited course
-  courses.forEach(course => {
+  deduped.forEach(course => {
     if (!visited.has(course.id)) {
       dfs(course.id);
     }
@@ -86,12 +159,16 @@ function dfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
   let semesterCredits = 0;
   let hardCount = 0;
   const scheduledCompleted = new Set([...completedCourses]);
+  let failed = false;
 
   for (const courseId of visitOrder) {
     const course = courseMap[courseId];
     if (!course || completedCourses.has(courseId)) continue;
 
-    // Check if prerequisites are met (they should be, given DFS post-order)
+    // Check if prerequisites are met (they should be, given DFS post-order).
+    // If not, flush the current semester and re-check; if still unmet the
+    // input is unsatisfiable (e.g. violated ordering), so fail safely
+    // instead of scheduling a prerequisite violation.
     if (!prerequisitesSatisfied(course, scheduledCompleted)) {
       // Push to next semester
       if (semesterCourses.length > 0) {
@@ -105,6 +182,15 @@ function dfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
         semesterCourses = [];
         semesterCredits = 0;
         hardCount = 0;
+      }
+      if (!prerequisitesSatisfied(course, scheduledCompleted)) {
+        failed = true;
+        steps.push({
+          action: 'DEADLOCK',
+          courseId: course.id,
+          message: `Cannot schedule "${course.name}" - prerequisites cannot be satisfied`
+        });
+        break;
       }
     }
 
@@ -136,7 +222,11 @@ function dfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
     semesterCourses.push(course);
     semesterCredits += course.credits;
     if (isHard) hardCount++;
-    scheduledCompleted.add(course.id);
+    // NOTE: the course is deliberately NOT added to scheduledCompleted here.
+    // A prerequisite must be completed in a strictly earlier semester, so
+    // semester courses only become "completed" when the semester is flushed
+    // (see both flush sites above). Marking them immediately would let a
+    // dependent join the same semester as its prerequisite — an invalid plan.
 
     steps.push({
       action: 'SCHEDULE',
@@ -157,8 +247,15 @@ function dfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
     });
   }
 
+  const plannedIds = new Set(semesterPlan.flatMap(s => s.courses.map(c => c.id)));
+  const unplanned = deduped.filter(c => !completedCourses.has(c.id) && !plannedIds.has(c.id)).map(c => c.id);
+  const success = !failed && unplanned.length === 0;
+
   return {
     algorithm: 'DFS',
+    success,
+    ...(success ? {} : { error: failed ? 'Could not satisfy prerequisites for all courses' : `Could not schedule ${unplanned.length} course(s)` }),
+    unplanned,
     semesterPlan,
     nodesExplored,
     totalSemesters: semesterPlan.length,

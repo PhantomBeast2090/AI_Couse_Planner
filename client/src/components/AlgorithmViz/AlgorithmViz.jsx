@@ -3,10 +3,10 @@ import { useApp } from '../../store/AppContext';
 import { runAlgorithm } from '../../utils/api';
 
 const ALGORITHMS = [
-  { id: 'bfs',   label: 'BFS',  full: 'Breadth-First Search',  color: '#00ffff', desc: 'Explores level by level — guarantees fewest semesters' },
+  { id: 'bfs',   label: 'BFS',  full: 'Breadth-First Search',  color: '#00ffff', desc: 'Explores level by level — aims for fewer semesters' },
   { id: 'dfs',   label: 'DFS',  full: 'Depth-First Search',    color: '#0088ff', desc: 'Deep-dives prerequisite chains before branching' },
-  { id: 'ucs',   label: 'UCS',  full: 'Uniform Cost Search',   color: '#00ff88', desc: 'Minimizes cumulative difficulty (easiest path)' },
-  { id: 'astar', label: 'A*',   full: 'A* Search',             color: '#ffff00', desc: 'Optimal: f(n) = g(n) + h(n) using critical path heuristic' },
+  { id: 'ucs',   label: 'UCS',  full: 'Uniform Cost Search',   color: '#00ff88', desc: 'Expands lowest-difficulty states first (cost-aware)' },
+  { id: 'astar', label: 'A*',   full: 'A* Search',             color: '#ffff00', desc: 'Heuristic search: f(n) = g(n) + h(n), critical-path estimate' },
   { id: 'csp',   label: 'CSP',  full: 'Constraint Satisfaction',color: '#ff8800', desc: 'Backtracking with MRV + LCV heuristics' },
 ];
 

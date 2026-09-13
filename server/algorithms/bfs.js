@@ -3,11 +3,13 @@
  * 
  * Strategy: Explore all courses at the current "depth" (semester level)
  * before moving deeper. Assigns courses layer by layer.
- * 
- * This ensures the SHORTEST number of semesters is found.
+ *
+ * Layer-by-layer packing tends to keep semester counts low on wide graphs,
+ * but greedy packing under tight constraints is not proven semester-minimal.
  */
 
 const { prerequisitesSatisfied, getAvailableCourses } = require('../utils/graphUtils');
+const { checkTriviallyImpossible } = require('../utils/planValidator');
 
 /**
  * BFS-based semester planner
@@ -25,10 +27,35 @@ function bfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
 
   const semesterPlan = [];
   const completed = new Set(completedCourses);
-  const pending = courses.filter(c => !completed.has(c.id));
+  // Deduplicate by id (first occurrence wins) so duplicate input rows
+  // can never produce a plan containing the same course twice.
+  const seenIds = new Set();
+  const pending = courses.filter(c => {
+    if (completed.has(c.id) || seenIds.has(c.id)) return false;
+    seenIds.add(c.id);
+    return true;
+  });
   const nodesExplored = [];
   const steps = [];
   let iteration = 0;
+  let deadlock = false;
+
+  // Fail fast when a single remaining course alone violates the limits.
+  const impossible = checkTriviallyImpossible(courses, completedCourses, constraints);
+  if (impossible) {
+    steps.push({ step: 0, action: 'DEADLOCK', message: impossible });
+    return {
+      algorithm: 'BFS',
+      success: false,
+      error: impossible,
+      unplanned: pending.map(c => c.id),
+      semesterPlan: [],
+      nodesExplored: [],
+      totalSemesters: 0,
+      totalCourses: courses.length - completedCourses.size,
+      steps
+    };
+  }
 
   // BFS: process all available courses level-by-level
   while (pending.length > 0) {
@@ -38,6 +65,7 @@ function bfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
 
     if (frontier.length === 0) {
       // Deadlock - prerequisites cannot be satisfied
+      deadlock = true;
       steps.push({
         step: iteration,
         action: 'DEADLOCK',
@@ -102,6 +130,19 @@ function bfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
       completed.add(c.id);
     });
 
+    // No progress: the frontier exists but nothing fits the constraints.
+    // Break instead of looping forever; the caller sees success=false.
+    if (semesterCourses.length === 0) {
+      deadlock = true;
+      steps.push({
+        step: iteration,
+        action: 'DEADLOCK',
+        message: 'No available course fits the semester constraints - planning cannot progress',
+        remaining: pending.map(c => c.id)
+      });
+      break;
+    }
+
     if (semesterCourses.length > 0) {
       semesterPlan.push({
         semester: semesterPlan.length + 1,
@@ -112,8 +153,14 @@ function bfsPlanner(courses, constraints = {}, completedCourses = new Set()) {
     }
   }
 
+  const unplanned = pending.map(c => c.id);
+  const success = !deadlock && unplanned.length === 0;
+
   return {
     algorithm: 'BFS',
+    success,
+    ...(success ? {} : { error: unplanned.length === 0 ? 'No courses to plan' : `Could not schedule ${unplanned.length} course(s): prerequisite deadlock or unsatisfiable constraints` }),
+    unplanned,
     semesterPlan,
     nodesExplored,
     totalSemesters: semesterPlan.length,

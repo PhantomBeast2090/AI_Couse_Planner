@@ -75,10 +75,13 @@ function getAvailableCourses(courses, completedSet) {
 
 /**
  * Calculate the critical path length (longest path to course)
- * Used as heuristic for A*
+ * Used as heuristic for A*.
+ * Cycle-safe: returns 1 for nodes revisited on the current path instead of
+ * recursing forever on cyclic prerequisite graphs.
  */
-function calculateCriticalPath(courseId, courses, memo = {}) {
+function calculateCriticalPath(courseId, courses, memo = {}, visiting = new Set()) {
   if (memo[courseId] !== undefined) return memo[courseId];
+  if (visiting.has(courseId)) return 1;
 
   const course = courses.find(c => c.id === courseId);
   if (!course) return 0;
@@ -87,11 +90,13 @@ function calculateCriticalPath(courseId, courses, memo = {}) {
     return 1;
   }
 
+  visiting.add(courseId);
   const maxPrereqPath = Math.max(
     ...course.prerequisites.map(prereqId =>
-      calculateCriticalPath(prereqId, courses, memo)
+      calculateCriticalPath(prereqId, courses, memo, visiting)
     )
   );
+  visiting.delete(courseId);
 
   memo[courseId] = maxPrereqPath + 1;
   return memo[courseId];

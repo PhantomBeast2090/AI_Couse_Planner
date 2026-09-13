@@ -1,18 +1,23 @@
 /**
  * A* Search for Course Path Planning
- * 
+ *
  * Strategy: f(n) = g(n) + h(n)
  *   g(n) = cost so far (cumulative difficulty of completed courses)
- *   h(n) = heuristic (estimated remaining difficulty = sum of difficulty of all
- *           remaining prerequisite chain courses)
- * 
- * A* with an admissible heuristic guarantees OPTIMAL path
- * (minimum total difficulty to complete all courses).
- * 
+ *   h(n) = heuristic (longest remaining prerequisite chain length via
+ *           calculateCriticalPath — an estimate of semesters still needed)
+ *
+ * Note on optimality: g (difficulty points) and h (chain length) use
+ * different units, the successor generator only samples a few greedy
+ * semester configurations, and search is capped at MAX_ITER with a greedy
+ * fallback. This is therefore a heuristic, goal-directed search — it is NOT
+ * a proven optimal A* in the strict admissibility sense. Do not describe it
+ * as guaranteeing minimum total difficulty.
+ *
  * Uses a min-heap priority queue on f(n).
  */
 
-const { calculateCriticalPath } = require('../utils/graphUtils');
+const { calculateCriticalPath, topologicalSort } = require('../utils/graphUtils');
+const { checkTriviallyImpossible } = require('../utils/planValidator');
 
 // ---- Min-Heap ----
 class MinHeap {
@@ -79,11 +84,74 @@ function astarPlanner(courses, constraints = {}, completedCourses = new Set(), g
   } = constraints;
 
   const courseMap = {};
-  courses.forEach(c => { courseMap[c.id] = c; });
-  const allIds = courses.map(c => c.id);
+  const deduped = [];
+  courses.forEach(c => {
+    if (!courseMap[c.id]) {
+      courseMap[c.id] = c;
+      deduped.push(c);
+    }
+  });
+  const allIds = deduped.map(c => c.id);
 
   const nodesExplored = [];
   const steps = [];
+
+  const remainingForCheck = deduped.filter(c => !(completedCourses instanceof Set ? completedCourses.has(c.id) : false));
+  // Fail safely on cyclic graphs (calculateCriticalPath is cycle-safe, but no
+  // valid plan exists, so report it instead of returning a partial plan).
+  if (remainingForCheck.length > 0 && topologicalSort(remainingForCheck) === null) {
+    steps.push({ action: 'ASTAR_DEADLOCK', message: 'Cyclic prerequisites detected - no valid ordering exists' });
+    return {
+      algorithm: 'A*',
+      success: false,
+      error: 'Cyclic prerequisites detected',
+      unplanned: remainingForCheck.map(c => c.id),
+      semesterPlan: [],
+      nodesExplored: [],
+      totalCost: 0,
+      totalSemesters: 0,
+      totalCourses: courses.length - completedCourses.size,
+      steps
+    };
+  }
+  // Fail safely on unknown prerequisite ids.
+  const knownIds = new Set(allIds);
+  const completedSet = completedCourses instanceof Set ? completedCourses : new Set();
+  const unknownPrereqs = [...new Set(
+    remainingForCheck.flatMap(c => c.prerequisites || []).filter(p => !knownIds.has(p) && !completedSet.has(p))
+  )];
+  if (unknownPrereqs.length > 0) {
+    steps.push({ action: 'ASTAR_DEADLOCK', message: `Unknown prerequisite id(s): ${unknownPrereqs.join(', ')}` });
+    return {
+      algorithm: 'A*',
+      success: false,
+      error: `Unknown prerequisite id(s): ${unknownPrereqs.join(', ')}`,
+      unplanned: remainingForCheck.map(c => c.id),
+      semesterPlan: [],
+      nodesExplored: [],
+      totalCost: 0,
+      totalSemesters: 0,
+      totalCourses: courses.length - completedCourses.size,
+      steps
+    };
+  }
+  // Fail fast when a single remaining course alone violates the limits.
+  const impossible = checkTriviallyImpossible(deduped, completedCourses, constraints);
+  if (impossible) {
+    steps.push({ action: 'ASTAR_DEADLOCK', message: impossible });
+    return {
+      algorithm: 'A*',
+      success: false,
+      error: impossible,
+      unplanned: remainingForCheck.map(c => c.id),
+      semesterPlan: [],
+      nodesExplored: [],
+      totalCost: 0,
+      totalSemesters: 0,
+      totalCourses: courses.length - completedCourses.size,
+      steps
+    };
+  }
 
   // State: { completed: Set, semesterPlan: [], g: number }
   // We use A* at the semester-planning level
@@ -94,7 +162,7 @@ function astarPlanner(courses, constraints = {}, completedCourses = new Set(), g
   const initialG = 0;
   const initialH = heuristic(
     allIds.filter(id => !initialCompleted.has(id)),
-    courses
+    deduped
   );
 
   const initState = {
@@ -140,7 +208,7 @@ function astarPlanner(courses, constraints = {}, completedCourses = new Set(), g
     });
 
     // Goal check: all courses scheduled
-    const remaining = courses.filter(c => !completed.has(c.id));
+    const remaining = deduped.filter(c => !completed.has(c.id));
     if (remaining.length === 0) {
       bestResult = { semesterPlan, g };
       steps.push({
@@ -177,8 +245,8 @@ function astarPlanner(courses, constraints = {}, completedCourses = new Set(), g
       if (visited.has(key) && visited.get(key) <= newG) return;
       visited.set(key, newG);
 
-      const newRemaining = courses.filter(c => !newCompleted.has(c.id));
-      const newH = heuristic(newRemaining.map(c => c.id), courses);
+      const newRemaining = deduped.filter(c => !newCompleted.has(c.id));
+      const newH = heuristic(newRemaining.map(c => c.id), deduped);
       const newF = newG + newH;
 
       const newPlan = [
@@ -215,16 +283,23 @@ function astarPlanner(courses, constraints = {}, completedCourses = new Set(), g
   if (!bestResult) {
     steps.push({
       action: 'ASTAR_FALLBACK',
-      message: 'A* hit iteration limit, using best partial result'
+      message: 'A* hit iteration limit, using greedy partial result'
     });
-    // Find best partial from visited
-    const partialState = { semesterPlan: [], g: 999999 };
-    // Just run greedy as fallback
-    bestResult = greedyFallback(courses, constraints, completedCourses, goal, courseMap);
+    // Greedy fallback over the deduplicated course list.
+    bestResult = greedyFallback(deduped, constraints, completedCourses, goal, courseMap);
   }
+
+  const plannedIds = new Set(bestResult.semesterPlan.flatMap(s => s.courses.map(c => c.id)));
+  const unplanned = deduped
+    .filter(c => !initialCompleted.has(c.id) && !plannedIds.has(c.id))
+    .map(c => c.id);
+  const success = unplanned.length === 0;
 
   return {
     algorithm: 'A*',
+    success,
+    ...(success ? {} : { error: `Could not schedule ${unplanned.length} course(s): prerequisite deadlock, iteration limit, or unsatisfiable constraints` }),
+    unplanned,
     semesterPlan: bestResult.semesterPlan,
     nodesExplored,
     totalCost: bestResult.g,
@@ -292,6 +367,7 @@ function greedyFallback(courses, constraints, completedCourses, goal, courseMap)
       : [...available].sort((a, b) => b.credits - a.credits);
 
     const semCourses = selectSemesterCourses(sorted, maxCredits, maxHardCourses, maxCoursesPerSemester);
+    if (semCourses.length === 0) break; // nothing fits: stop instead of looping forever
     const semCost = semCourses.reduce((s, c) => s + c.difficulty, 0);
     g += semCost;
     semCourses.forEach(c => {

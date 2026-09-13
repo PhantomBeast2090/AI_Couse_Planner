@@ -102,9 +102,20 @@ function variance(arr) {
 }
 
 /**
- * Analyze the course graph to inform algorithm selection
+ * Analyze the course graph to inform algorithm selection.
+ * Returns zeroed metrics (never NaN) for the empty course set.
  */
 function perceiveEnvironment(courses) {
+  if (!courses || courses.length === 0) {
+    return {
+      totalCourses: 0,
+      avgPrereqs: 0,
+      avgDifficulty: 0,
+      hasCycles: false,
+      maxDepth: 0,
+      isComplexGraph: false
+    };
+  }
   const { adj } = buildAdjacencyList(courses);
   const topoOrder = topologicalSort(courses);
   const totalCourses = courses.length;
@@ -155,9 +166,36 @@ function intelligentAgent(courses, constraints = {}, completedCourses = new Set(
   if (perception.hasCycles) {
     return {
       algorithm: 'Agent',
+      success: false,
       error: 'Cyclic prerequisites detected',
+      unplanned: courses.map(c => c.id),
       agentLog,
       semesterPlan: []
+    };
+  }
+
+  // Empty course set: vacuous success with an empty plan (never NaN scores).
+  if (perception.totalCourses === 0) {
+    agentLog.push({
+      phase: 'DECISION',
+      chosenStrategy: null,
+      score: 0,
+      message: 'Agent DECISION: no courses to plan - returning empty plan'
+    });
+    return {
+      algorithm: 'Intelligent Agent',
+      success: true,
+      unplanned: [],
+      chosenStrategy: null,
+      allStrategiesEvaluated: [],
+      semesterPlan: [],
+      nodesExplored: [],
+      totalSemesters: 0,
+      totalCourses: 0,
+      workloadAnalysis: [],
+      recommendations: [],
+      agentLog,
+      steps: []
     };
   }
 
@@ -218,6 +256,39 @@ function intelligentAgent(courses, constraints = {}, completedCourses = new Set(
   results.sort((a, b) => b.score - a.score);
   const best = results[0];
 
+  // If every candidate failed (empty plan), fail safely instead of
+  // returning an empty plan as if it were a valid schedule.
+  const bestPlan = best.result.semesterPlan || [];
+  if (bestPlan.length === 0) {
+    agentLog.push({
+      phase: 'DECISION',
+      chosenStrategy: null,
+      score: best.score,
+      message: `Agent DECISION: all strategies failed (${results.map(r => r.strat).join(', ')}) - no valid plan`
+    });
+    return {
+      algorithm: 'Intelligent Agent',
+      success: false,
+      error: best.result.error || 'No valid plan found for the given constraints',
+      unplanned: best.result.unplanned || courses.map(c => c.id),
+      chosenStrategy: null,
+      allStrategiesEvaluated: results.map(r => ({
+        strategy: r.strat,
+        semesters: r.result.semesterPlan?.length || 0,
+        score: Number.isFinite(r.score) ? +r.score.toFixed(2) : null,
+        elapsed: r.elapsed
+      })),
+      semesterPlan: [],
+      nodesExplored: [],
+      totalSemesters: 0,
+      totalCourses: courses.length,
+      workloadAnalysis: [],
+      recommendations: [],
+      agentLog,
+      steps: []
+    };
+  }
+
   // Build semester-by-semester workload analysis
   const workloadAnalysis = best.result.semesterPlan.map((sem, i) => {
     const avgDiff = sem.courses.length > 0
@@ -244,11 +315,13 @@ function intelligentAgent(courses, constraints = {}, completedCourses = new Set(
 
   return {
     algorithm: 'Intelligent Agent',
+    success: true,
+    unplanned: best.result.unplanned || [],
     chosenStrategy: best.strat,
     allStrategiesEvaluated: results.map(r => ({
       strategy: r.strat,
       semesters: r.result.semesterPlan?.length || 0,
-      score: +r.score.toFixed(2),
+      score: Number.isFinite(r.score) ? +r.score.toFixed(2) : null,
       elapsed: r.elapsed
     })),
     semesterPlan: best.result.semesterPlan,
@@ -307,4 +380,4 @@ function generateRecommendations(semesterPlan, goal, perception) {
   return recs;
 }
 
-module.exports = { intelligentAgent, scorePlan };
+module.exports = { intelligentAgent, scorePlan, perceiveEnvironment };

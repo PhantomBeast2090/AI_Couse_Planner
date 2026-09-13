@@ -18,6 +18,7 @@
  */
 
 const { topologicalSort } = require('../utils/graphUtils');
+const { checkTriviallyImpossible } = require('../utils/planValidator');
 
 /**
  * CSP Planner: assign courses to semesters using backtracking + propagation
@@ -33,20 +34,69 @@ function cspPlanner(courses, constraints = {}, completedCourses = new Set()) {
   const steps = [];
   const nodesExplored = [];
 
-  // Filter out completed courses
-  const remaining = courses.filter(c => !completedCourses.has(c.id));
+  // Deduplicate by id (first occurrence wins); without this, topologicalSort
+  // would report a false cycle whenever the input contains duplicate rows.
   const courseMap = {};
-  courses.forEach(c => { courseMap[c.id] = c; });
+  const deduped = [];
+  courses.forEach(c => {
+    if (c && typeof c.id === 'string' && !courseMap[c.id]) {
+      courseMap[c.id] = c;
+      deduped.push(c);
+    }
+  });
+  const completedSet = completedCourses instanceof Set ? completedCourses : new Set();
+
+  // Filter out completed courses
+  const remaining = deduped.filter(c => !completedSet.has(c.id));
+
+  // Fail fast on unknown prerequisite ids (isConsistent would also reject
+  // them, but an explicit error is clearer and cheaper).
+  const knownIds = new Set(deduped.map(c => c.id));
+  const unknownPrereqs = [...new Set(
+    remaining.flatMap(c => c.prerequisites || []).filter(p => !knownIds.has(p) && !completedSet.has(p))
+  )];
+  if (unknownPrereqs.length > 0) {
+    steps.push({
+      action: 'CSP_FAILED',
+      message: `Unknown prerequisite id(s): ${unknownPrereqs.join(', ')}`
+    });
+    return {
+      algorithm: 'CSP',
+      success: false,
+      error: `Unknown prerequisite id(s): ${unknownPrereqs.join(', ')}`,
+      unplanned: remaining.map(c => c.id),
+      semesterPlan: [],
+      nodesExplored: [],
+      steps
+    };
+  }
+
+  // Fail fast when a single remaining course alone violates the limits.
+  const impossible = checkTriviallyImpossible(deduped, completedSet, constraints);
+  if (impossible) {
+    steps.push({ action: 'CSP_FAILED', message: impossible });
+    return {
+      algorithm: 'CSP',
+      success: false,
+      error: impossible,
+      unplanned: remaining.map(c => c.id),
+      semesterPlan: [],
+      nodesExplored: [],
+      steps
+    };
+  }
 
   // Topological sort gives us an ordering hint
   const topoOrder = topologicalSort(remaining);
   if (!topoOrder) {
     return {
       algorithm: 'CSP',
+      success: false,
       error: 'Cyclic prerequisites detected',
+      unplanned: remaining.map(c => c.id),
       semesterPlan: [],
       nodesExplored: [],
-      steps: []
+      steps
     };
   }
 
@@ -66,29 +116,32 @@ function cspPlanner(courses, constraints = {}, completedCourses = new Set()) {
     message: `CSP initialized with ${remaining.length} variables, domain 1..${maxSemesters}`
   });
 
-  // Forward checking propagation
+  // Forward checking propagation.
+  // Constrains dependents to later semesters and prerequisites of the
+  // assigned course to earlier semesters. Returns the narrowed domains,
+  // or null when a domain is wiped out (propagated failure).
   function propagate(courseId, sem, currentDomains) {
     const copy = {};
     Object.keys(currentDomains).forEach(k => { copy[k] = [...currentDomains[k]]; });
 
-    // All courses that depend on this course must be in sem+1 or later
-    remaining.forEach(c => {
+    const assigned = remaining.find(c => c.id === courseId);
+
+    // All courses that depend on this course must be in sem+1 or later.
+    for (const c of remaining) {
       if (c.prerequisites.includes(courseId) && copy[c.id]) {
         copy[c.id] = copy[c.id].filter(s => s > sem);
-        if (copy[c.id].length === 0) {
-          return null; // Domain wipeout
+        if (copy[c.id].length === 0) return null; // domain wipeout
+      }
+    }
+    // All prerequisites of the assigned course must be in sem-1 or earlier.
+    if (assigned) {
+      for (const prereqId of assigned.prerequisites) {
+        if (copy[prereqId]) {
+          copy[prereqId] = copy[prereqId].filter(s => s < sem);
+          if (copy[prereqId].length === 0) return null; // domain wipeout
         }
       }
-      // All prerequisites of this course must be in sem-1 or earlier
-      if (courseId === c.id) {
-        c.prerequisites.forEach(prereqId => {
-          if (copy[prereqId]) {
-            copy[prereqId] = copy[prereqId].filter(s => s < sem);
-            if (copy[prereqId].length === 0) return null;
-          }
-        });
-      }
-    });
+    }
 
     return copy;
   }
@@ -100,7 +153,7 @@ function cspPlanner(courses, constraints = {}, completedCourses = new Set()) {
 
     // 1. Prerequisites must be in earlier semesters
     for (const prereqId of course.prerequisites) {
-      const prereqSem = completedCourses.has(prereqId) ? 0 : currentAssignment[prereqId];
+      const prereqSem = completedSet.has(prereqId) ? 0 : currentAssignment[prereqId];
       if (prereqSem === null || prereqSem === undefined || prereqSem >= sem) {
         return false;
       }
@@ -121,10 +174,31 @@ function cspPlanner(courses, constraints = {}, completedCourses = new Set()) {
     return true;
   }
 
-  // MRV - pick the variable with smallest domain (most constrained)
+  // MRV - pick the variable with smallest domain (most constrained).
+  // Only "ready" variables are eligible: every prerequisite must already be
+  // assigned (or pre-completed). Picking a dependent before its prerequisites
+  // are assigned can never satisfy isConsistent, so unrestrained MRV dead-ends
+  // on branching graphs (e.g. A -> C <- B) even when valid plans exist.
+  // Gating on readiness keeps completeness: every valid assignment has a
+  // topological selection order, and a DAG always offers a ready variable.
   function selectUnassignedVariable(currentAssignment, currentDomains) {
     let minLen = Infinity;
     let chosen = null;
+    for (const courseId of topoOrder) {
+      if (currentAssignment[courseId] !== null) continue;
+      const course = courseMap[courseId];
+      const ready = (course.prerequisites || []).every(p =>
+        completedSet.has(p) || (currentAssignment[p] !== null && currentAssignment[p] !== undefined)
+      );
+      if (!ready) continue;
+      const domLen = (currentDomains[courseId] || []).length;
+      if (domLen < minLen) {
+        minLen = domLen;
+        chosen = courseId;
+      }
+    }
+    if (chosen) return chosen;
+    // Fallback for safety: plain MRV (reached only on unsatisfiable input).
     for (const courseId of topoOrder) {
       if (currentAssignment[courseId] === null) {
         const domLen = (currentDomains[courseId] || []).length;
@@ -216,14 +290,18 @@ function cspPlanner(courses, constraints = {}, completedCourses = new Set()) {
     });
     return {
       algorithm: 'CSP',
+      success: false,
       error: 'No valid assignment found',
+      unplanned: remaining.map(c => c.id),
       semesterPlan: [],
       nodesExplored,
       steps
     };
   }
 
-  // Build semester plan from assignment
+  // Build semester plan from assignment. Raw CSP semester numbers can be
+  // non-contiguous (e.g. 1,3,5), so compress them to 1..k while preserving
+  // order — prerequisite "strictly earlier" relations are unaffected.
   const semMap = {};
   Object.entries(result).forEach(([courseId, sem]) => {
     if (!semMap[sem]) semMap[sem] = [];
@@ -233,8 +311,8 @@ function cspPlanner(courses, constraints = {}, completedCourses = new Set()) {
   const semesterPlan = Object.keys(semMap)
     .map(Number)
     .sort((a, b) => a - b)
-    .map(sem => ({
-      semester: sem,
+    .map((sem, idx) => ({
+      semester: idx + 1,
       courses: semMap[sem],
       totalCredits: semMap[sem].reduce((s, c) => s + c.credits, 0),
       hardCourseCount: semMap[sem].filter(c => c.difficulty >= 4).length
@@ -249,6 +327,8 @@ function cspPlanner(courses, constraints = {}, completedCourses = new Set()) {
 
   return {
     algorithm: 'CSP',
+    success: true,
+    unplanned: [],
     semesterPlan,
     nodesExplored,
     backtrackCount,

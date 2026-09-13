@@ -60,11 +60,15 @@ app.use((err, req, res, next) => {
 });
 
 // ── Start server ──────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🚀 PathAI server running at http://localhost:${PORT}`);
-  console.log(`   API docs: http://localhost:${PORT}/api/health`);
-  console.log(`   Courses:  http://localhost:${PORT}/api/courses`);
-  console.log(`   Graph:    http://localhost:${PORT}/api/planning/graph\n`);
-});
+// Only bind a port when run directly (`node index.js`). Requiring this
+// module (e.g. from tests) returns the app without side effects.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 PathAI server running at http://localhost:${PORT}`);
+    console.log(`   API docs: http://localhost:${PORT}/api/health`);
+    console.log(`   Courses:  http://localhost:${PORT}/api/courses`);
+    console.log(`   Graph:    http://localhost:${PORT}/api/planning/graph\n`);
+  });
+}
 
 module.exports = app;

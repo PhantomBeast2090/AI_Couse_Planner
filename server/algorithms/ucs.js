@@ -9,6 +9,7 @@
  */
 
 const { prerequisitesSatisfied } = require('../utils/graphUtils');
+const { checkTriviallyImpossible } = require('../utils/planValidator');
 
 // ---- Min-Heap Priority Queue (manual implementation) ----
 class MinHeap {
@@ -68,15 +69,39 @@ function ucsPlanner(courses, constraints = {}, completedCourses = new Set()) {
   } = constraints;
 
   const courseMap = {};
-  courses.forEach(c => { courseMap[c.id] = c; });
+  courses.forEach(c => { if (!courseMap[c.id]) courseMap[c.id] = c; });
 
   const nodesExplored = [];
   const steps = [];
   const completed = new Set(completedCourses);
-  const remaining = courses.filter(c => !completed.has(c.id));
+  const seenIds = new Set();
+  const remaining = courses.filter(c => {
+    if (completed.has(c.id) || seenIds.has(c.id)) return false;
+    seenIds.add(c.id);
+    return true;
+  });
   const semesterPlan = [];
   let totalCost = 0;
   let semesterNum = 0;
+  let deadlock = false;
+
+  // Fail fast when a single remaining course alone violates the limits.
+  const impossible = checkTriviallyImpossible(courses, completedCourses, constraints);
+  if (impossible) {
+    steps.push({ action: 'DEADLOCK', message: impossible });
+    return {
+      algorithm: 'UCS',
+      success: false,
+      error: impossible,
+      unplanned: remaining.map(c => c.id),
+      semesterPlan: [],
+      nodesExplored: [],
+      totalCost: 0,
+      totalSemesters: 0,
+      totalCourses: courses.length - completedCourses.size,
+      steps
+    };
+  }
 
   while (remaining.length > 0) {
     semesterNum++;
@@ -85,6 +110,7 @@ function ucsPlanner(courses, constraints = {}, completedCourses = new Set()) {
     const available = remaining.filter(c => prerequisitesSatisfied(c, completed));
 
     if (available.length === 0) {
+      deadlock = true;
       steps.push({
         action: 'DEADLOCK',
         message: 'No courses can be scheduled - prerequisite deadlock'
@@ -151,6 +177,16 @@ function ucsPlanner(courses, constraints = {}, completedCourses = new Set()) {
       completed.add(c.id);
     });
 
+    // No progress: frontier exists but nothing fits the constraints.
+    if (semesterCourses.length === 0) {
+      deadlock = true;
+      steps.push({
+        action: 'DEADLOCK',
+        message: 'No available course fits the semester constraints - planning cannot progress'
+      });
+      break;
+    }
+
     if (semesterCourses.length > 0) {
       semesterPlan.push({
         semester: semesterNum,
@@ -162,8 +198,14 @@ function ucsPlanner(courses, constraints = {}, completedCourses = new Set()) {
     }
   }
 
+  const unplanned = remaining.map(c => c.id);
+  const success = !deadlock && unplanned.length === 0;
+
   return {
     algorithm: 'UCS',
+    success,
+    ...(success ? {} : { error: `Could not schedule ${unplanned.length} course(s): prerequisite deadlock or unsatisfiable constraints` }),
+    unplanned,
     semesterPlan,
     nodesExplored,
     totalCost,
