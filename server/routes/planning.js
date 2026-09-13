@@ -4,6 +4,7 @@
  * POST /api/planning/run         - Run a specific algorithm
  * POST /api/planning/compare     - Compare two algorithms side-by-side
  * POST /api/planning/agent       - Run the intelligent agent
+ * POST /api/planning/degree      - Plan a program-scoped 8-semester timeline
  * GET  /api/planning/graph       - Get graph data for visualization
  */
 
@@ -15,6 +16,8 @@ const { ucsPlanner } = require('../algorithms/ucs');
 const { astarPlanner } = require('../algorithms/astar');
 const { cspPlanner } = require('../algorithms/csp');
 const { intelligentAgent } = require('../algorithms/agent');
+const { planDegreeTimeline } = require('../algorithms/degreePlanner');
+const { listPrograms } = require('../data/programs');
 const coursesRouter = require('./courses');
 
 function getCourses() {
@@ -152,6 +155,38 @@ router.post('/agent', (req, res) => {
   const start = Date.now();
   const result = intelligentAgent(courses, constraints, completed, goal, specializationTags);
 
+  res.json({ ...result, executionTimeMs: Date.now() - start });
+});
+
+// ── POST /api/planning/degree ──────────────────────────────
+// Program-scoped timeline: at most 8 semesters, at most 8 courses per
+// semester. Never emits Semester 9+; overflow yields success:false with
+// reason PLAN_EXCEEDS_8_SEMESTERS and an explicit unplanned list.
+router.post('/degree', (req, res) => {
+  const {
+    programId,
+    goal = 'balanced',
+    constraints = {},
+    completedCourseIds = [],
+    specializationTags = []
+  } = req.body || {};
+
+  if (!programId || typeof programId !== 'string') {
+    return res.status(400).json({
+      error: 'programId is required',
+      programs: listPrograms().map(p => p.id)
+    });
+  }
+
+  const courses = getCourses();
+  if (courses.length === 0) {
+    return res.status(400).json({ error: 'No courses loaded.' });
+  }
+
+  const start = Date.now();
+  const result = planDegreeTimeline(
+    courses, programId, constraints, new Set(completedCourseIds), goal, specializationTags
+  );
   res.json({ ...result, executionTimeMs: Date.now() - start });
 });
 

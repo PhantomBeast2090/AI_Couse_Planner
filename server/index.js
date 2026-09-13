@@ -9,6 +9,7 @@ const bodyParser = require('body-parser');
 const coursesRouter = require('./routes/courses');
 const planningRouter = require('./routes/planning');
 const simulationRouter = require('./routes/simulation');
+const programsRouter = require('./routes/programs');
 const { sampleCourses } = require('./data/sampleCourses');
 
 const app = express();
@@ -36,6 +37,7 @@ console.log(`✅ Auto-loaded ${sampleCourses.length} courses from sample dataset
 app.use('/api/courses', coursesRouter);
 app.use('/api/planning', planningRouter);
 app.use('/api/simulation', simulationRouter);
+app.use('/api/programs', programsRouter);
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

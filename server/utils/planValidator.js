@@ -152,4 +152,73 @@ function checkTriviallyImpossible(courses, completedInput, constraints = {}) {
   return null;
 }
 
-module.exports = { normalizeInputs, validatePlan, findUnplanned, checkTriviallyImpossible };
+/**
+ * Validate a degree timeline against the hard product rules.
+ *
+ * Beyond validatePlan it checks: semester count cap, per-semester course
+ * cap, contiguous 1..k numbering (so "Semester 9+" cannot hide), program
+ * membership, and required-course coverage (every required non-completed
+ * course is either planned or explicitly listed as unplanned).
+ */
+function validateTimeline(timeline, options = {}) {
+  const {
+    courses = [],
+    completedInput = new Set(),
+    constraints = {},
+    programCourseIds = null,
+    requiredIds = [],
+    unplannedIds = [],
+    maxSemesters = 8,
+    maxCoursesPerSemester = 8,
+  } = options;
+
+  const errors = [];
+  const plan = (timeline && timeline.semesterPlan) || timeline || [];
+
+  const base = validatePlan(plan, courses, completedInput, constraints);
+  errors.push(...base.errors);
+
+  if (plan.length > maxSemesters) {
+    errors.push(`timeline has ${plan.length} semesters, limit is ${maxSemesters}`);
+  }
+  plan.forEach((sem, idx) => {
+    const count = ((sem && sem.courses) || []).length;
+    if (count > maxCoursesPerSemester) {
+      errors.push(`semester ${idx + 1}: ${count} courses exceeds limit ${maxCoursesPerSemester}`);
+    }
+    if (sem && sem.semester !== undefined && sem.semester !== idx + 1) {
+      errors.push(`semester numbering must be contiguous 1..k, found ${sem.semester} at position ${idx + 1}`);
+    }
+  });
+
+  if (programCourseIds) {
+    const allowed = new Set(programCourseIds);
+    plan.forEach((sem, idx) => {
+      ((sem && sem.courses) || []).forEach((c) => {
+        if (c && c.id && !allowed.has(c.id)) {
+          errors.push(`semester ${idx + 1}: course "${c.id}" is outside the selected program`);
+        }
+      });
+    });
+  }
+
+  if (requiredIds.length > 0) {
+    const { completedSet } = normalizeInputs(courses, completedInput);
+    const planned = new Set();
+    plan.forEach((sem) => {
+      ((sem && sem.courses) || []).forEach((c) => {
+        if (c && c.id) planned.add(c.id);
+      });
+    });
+    const unplanned = new Set(unplannedIds);
+    requiredIds.forEach((id) => {
+      if (!completedSet.has(id) && !planned.has(id) && !unplanned.has(id)) {
+        errors.push(`required course "${id}" is neither planned, completed, nor reported unplanned`);
+      }
+    });
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+module.exports = { normalizeInputs, validatePlan, findUnplanned, checkTriviallyImpossible, validateTimeline };

@@ -77,6 +77,8 @@ Node.js + Express (`server/`): pure planner modules with no HTTP imports, thin r
 | POST | `/api/planning/run` | Run one algorithm |
 | POST | `/api/planning/compare` | Compare two algorithms on identical input |
 | POST | `/api/planning/agent` | Run the intelligent agent |
+| POST | `/api/planning/degree` | Program-scoped timeline (max 8 semesters, 8/semester) |
+| GET | `/api/programs` | List degree programs |
 | GET | `/api/planning/graph` | Nodes, edges, statistics for visualization |
 | * | `/api/courses/*` | Dataset CRUD + sample/default loading |
 | POST | `/api/simulation/*` | Fail-course / complete / what-if scenarios |

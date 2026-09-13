@@ -61,6 +61,8 @@ Graph statistics for visualization come from `GET /api/planning/graph` (nodes wi
 | `server/algorithms/` | `bfs.js`, `dfs.js`, `ucs.js`, `astar.js`, `csp.js`, `agent.js` — pure planners, no HTTP. |
 | `server/routes/` | `courses.js` (CRUD + dataset loading, owns the in-memory store), `planning.js` (`/run`, `/compare`, `/agent`, `/graph`), `simulation.js` (fail-course / complete / what-if scenarios). |
 | `server/data/` | `sampleCourses.js` — the large DAG dataset. |
+| `server/data/` | `programs.js` — degree catalog (explicit required-course lists + 8/8 hard caps), since the dataset has no degree field. |
+| `server/algorithms/` | `degreePlanner.js` — program-scoped 8-semester scheduler reusing graph utils, goal semantics and the shared timeline validator. |
 | `server/utils/` | `graphUtils.js` (graph ops), `planValidator.js` (shared correctness rules used by planners, tests, benchmark), `defaultTrack.js` (degree-track subset). |
 | `server/tests/` | `helpers.js`, `algorithms.test.js`, `agent.test.js`, `api.test.js` — `node:test`, zero new dependencies. |
 | `server/scripts/benchmark.js` | Reproducible cross-algorithm benchmark; method in `docs/evaluation.md`. |

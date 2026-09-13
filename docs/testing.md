@@ -18,6 +18,7 @@ npm test          # runs node --test tests/
 | `tests/agent.test.js` | Perception (incl. empty/cycle), each `scorePlan` goal preference, strategy-map selection per goal + unknown-goal fallback, argmax decision, plan validity, `agentLog` phases, workload/recommendation shape, failure handling, determinism (same input twice → same choice + plan). |
 | `tests/api.test.js` | Real Express app on an ephemeral port: `POST /run` (shape + `400` on unknown algorithm), `POST /compare` (both sides + winner), `POST /agent` (strategy + log + workload), `GET /graph` (nodes/edges/stats), `GET /health`. |
 | `tests/simulation.test.js` | Same harness for `POST /simulation/fail-course` (impact + valid revised plan, `400`/`404` paths), `/complete` (progress + valid plan, graduation case), `/what-if` (exclusion replanning + valid plan, empty-after-exclusion `400`). |
+| `tests/degree.test.js` | 8-semester regression suite: all catalog programs fit, parallel packing, completed exclusion, 10-chain safe failure (no Semester 9+), program differentiation, failed-course replanning, invalid programs, tight-constraint overflow, plus `GET /programs` and `POST /planning/degree` route tests. |
 
 ## Shared Assertions
 

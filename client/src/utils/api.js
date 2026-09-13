@@ -34,6 +34,11 @@ export const runAgent = (goal, constraints, completedIds, specializationTags) =>
 
 export const getGraphData = () => api.get('/planning/graph');
 
+export const getPrograms = () => api.get('/programs');
+
+export const runDegreePlan = (programId, goal, constraints, completedIds, specializationTags) =>
+  api.post('/planning/degree', { programId, goal, constraints, completedCourseIds: completedIds, specializationTags });
+
 // ── Simulation ─────────────────────────────────────────────
 export const simulateFailCourse = (failedCourseId, completedIds, goal, constraints) =>
   api.post('/simulation/fail-course', { failedCourseId, completedCourseIds: completedIds, goal, constraints });

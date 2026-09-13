@@ -124,3 +124,33 @@ Response (illustrative values measured from the bundled 82-course dataset):
 ## Health
 
 `GET /api/health` → `{ status: 'ok', app: 'PathAI', version, coursesLoaded, timestamp }`.
+
+## Degree Programs
+
+Programs are explicit required-course lists (`server/data/programs.js`) — the catalog has no degree field, so tag overlap cannot define a degree.
+
+### GET `/api/programs`
+
+Lists the catalog: `id`, `name`, `description`, `requiredCourses`, `maxSemesters` (8), `maxCoursesPerSemester` (8).
+
+### POST `/api/planning/degree`
+
+Program-scoped timeline. Hard caps: 8 semesters, 8 courses/semester (user `maxCoursesPerSemester` is clamped, never raised). Never emits Semester 9+.
+
+Request:
+
+```json
+{
+  "programId": "bsc-cs",
+  "goal": "balanced",
+  "constraints": { "maxCredits": 21, "maxHardCourses": 3, "maxCoursesPerSemester": 8 },
+  "completedCourseIds": ["cs101"],
+  "specializationTags": []
+}
+```
+
+Success response: `{ success: true, programId, programName, semesterPlan (≤8), totalSemesters, unplannedCourses: [], autoIncludedPrerequisites, validation, workloadAnalysis, executionTimeMs }`.
+
+Overflow response (`success: false`, HTTP 200): `{ reason: "PLAN_EXCEEDS_8_SEMESTERS", semesterPlan (≤8 partial), unplannedCourses: [{ id, name, reason }], message }`.
+
+Missing `programId` → `400` with the valid id list.
